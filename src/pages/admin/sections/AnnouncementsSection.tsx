@@ -5,17 +5,13 @@ import { Input } from '@/components/ui/Input';
 import { PriorityBadge } from '@/components/ui/Badge';
 import { FormField, adminSelectClass, adminTextareaClass } from '@/components/admin/FormField';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
+import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
+import { useAdminFeedback } from '@/hooks/useAdminFeedback';
 import { supabase } from '@/lib/supabase/client';
-import { refreshAppData } from '@/services/admin';
 import { PRIORITY_LABELS, type Announcement, type AnnouncementPriority } from '@/types';
-import type { AdminSectionProps } from '../types';
 
-export function AnnouncementsSection({
-  showMessage,
-  showError,
-  loading,
-  setLoading,
-}: AdminSectionProps) {
+export function AnnouncementsSection() {
+  const { feedback, saving, run } = useAdminFeedback();
   const [list, setList] = useState<Announcement[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -33,13 +29,12 @@ export function AnnouncementsSection({
   }, []);
 
   useEffect(() => {
-    load().catch((e) => showError(e instanceof Error ? e.message : 'Ошибка'));
-  }, [load, showError]);
+    load().catch(() => undefined);
+  }, [load]);
 
   async function saveNew() {
     if (!title.trim() || !body.trim()) return;
-    setLoading(true);
-    try {
+    await run('Объявление опубликовано', async () => {
       const { error } = await supabase.from('announcements').insert({
         title: title.trim(),
         body: body.trim(),
@@ -51,78 +46,50 @@ export function AnnouncementsSection({
       setBody('');
       setPriority('normal');
       await load();
-      await refreshAppData();
-      showMessage('Объявление опубликовано');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function saveEdit() {
     if (!editing) return;
-    setLoading(true);
-    try {
+    await run('Объявление сохранено', async () => {
       const { error } = await supabase
         .from('announcements')
-        .update({
-          title: title.trim(),
-          body: body.trim(),
-          priority,
-        })
+        .update({ title: title.trim(), body: body.trim(), priority })
         .eq('id', editing.id);
       if (error) throw error;
       setEditing(null);
+      setTitle('');
+      setBody('');
       await load();
-      await refreshAppData();
-      showMessage('Объявление сохранено');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function togglePublish(a: Announcement) {
-    setLoading(true);
-    try {
+    await run(a.is_published ? 'Снято с публикации' : 'Снова опубликовано', async () => {
       const { error } = await supabase
         .from('announcements')
         .update({ is_published: !a.is_published })
         .eq('id', a.id);
       if (error) throw error;
       await load();
-      await refreshAppData();
-      showMessage(a.is_published ? 'Снято с публикации' : 'Снова опубликовано');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function remove(id: string) {
-    setLoading(true);
-    try {
+    await run('Объявление удалено', async () => {
       const { error } = await supabase.from('announcements').delete().eq('id', id);
       if (error) throw error;
       setDeleteId(null);
       await load();
-      await refreshAppData();
-      showMessage('Объявление удалено');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   return (
     <div className="space-y-4">
+      <AdminStatusBanner feedback={feedback} />
+
       <Card className="bg-amber-50 border-amber-200 text-sm text-amber-900">
-        <strong>Срочные</strong> показываются на главном экране у всех. Перед публикацией проверьте текст —
-        опечатку можно исправить кнопкой «Изменить».
+        После «Опубликовать» появится <strong>зелёное сообщение</strong> вверху. Срочные — на главном экране у всех.
       </Card>
 
       <Card className="space-y-3">
@@ -146,7 +113,9 @@ export function AnnouncementsSection({
         </FormField>
         {editing ? (
           <>
-            <Button fullWidth onClick={saveEdit} disabled={loading}>Сохранить изменения</Button>
+            <Button fullWidth onClick={saveEdit} disabled={saving}>
+              {saving ? 'Сохранение…' : 'Сохранить изменения'}
+            </Button>
             <Button
               fullWidth
               variant="secondary"
@@ -160,14 +129,14 @@ export function AnnouncementsSection({
             </Button>
           </>
         ) : (
-          <Button fullWidth onClick={saveNew} disabled={loading || !title || !body}>
-            Опубликовать
+          <Button fullWidth onClick={saveNew} disabled={saving || !title.trim() || !body.trim()}>
+            {saving ? 'Публикация…' : 'Опубликовать'}
           </Button>
         )}
       </Card>
 
       <Card className="space-y-3">
-        <h3 className="font-semibold">Все объявления</h3>
+        <h3 className="font-semibold">Все объявления ({list.length})</h3>
         {list.map((a) => (
           <div key={a.id} className={`rounded-xl border p-3 space-y-2 ${!a.is_published ? 'opacity-60' : ''}`}>
             <div className="flex justify-between gap-2">
@@ -175,7 +144,6 @@ export function AnnouncementsSection({
               <PriorityBadge priority={a.priority} />
             </div>
             <p className="text-sm text-slate-600 line-clamp-2">{a.body}</p>
-            {!a.is_published && <p className="text-xs text-amber-700">Не опубликовано</p>}
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
@@ -189,7 +157,7 @@ export function AnnouncementsSection({
               >
                 Изменить
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => togglePublish(a)}>
+              <Button size="sm" variant="secondary" onClick={() => togglePublish(a)} disabled={saving}>
                 {a.is_published ? 'Снять' : 'Опубликовать'}
               </Button>
               <Button size="sm" variant="danger" onClick={() => setDeleteId(a.id)}>
@@ -203,10 +171,11 @@ export function AnnouncementsSection({
       <ConfirmDialog
         open={!!deleteId}
         title="Удалить объявление?"
-        message="Оно исчезнет у всех участников."
+        message="Оно исчезнет у всех участников. Отменить нельзя."
+        confirmLabel="Удалить"
         onConfirm={() => deleteId && remove(deleteId)}
         onCancel={() => setDeleteId(null)}
-        loading={loading}
+        loading={saving}
       />
     </div>
   );

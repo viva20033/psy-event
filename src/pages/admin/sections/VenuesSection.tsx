@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FormField, adminTextareaClass } from '@/components/admin/FormField';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
+import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
+import { useAdminFeedback } from '@/hooks/useAdminFeedback';
 import { supabase } from '@/lib/supabase/client';
 import { slugify } from '@/lib/utils/slug';
-import { refreshAppData } from '@/services/admin';
 import type { Venue } from '@/types';
-import type { AdminSectionProps } from '../types';
 
 const empty = (): Partial<Venue> => ({
   name: '',
@@ -20,7 +20,8 @@ const empty = (): Partial<Venue> => ({
   sort_order: 0,
 });
 
-export function VenuesSection({ showMessage, showError, loading, setLoading }: AdminSectionProps) {
+export function VenuesSection() {
+  const { feedback, saving, run } = useAdminFeedback();
   const [list, setList] = useState<Venue[]>([]);
   const [form, setForm] = useState<Partial<Venue> & { id?: string }>(empty());
   const [editing, setEditing] = useState(false);
@@ -33,8 +34,8 @@ export function VenuesSection({ showMessage, showError, loading, setLoading }: A
   }, []);
 
   useEffect(() => {
-    load().catch((e) => showError(e instanceof Error ? e.message : 'Ошибка'));
-  }, [load, showError]);
+    load().catch(() => undefined);
+  }, [load]);
 
   function startCreate() {
     setForm(empty());
@@ -47,15 +48,12 @@ export function VenuesSection({ showMessage, showError, loading, setLoading }: A
   }
 
   async function save() {
-    if (!form.name?.trim()) {
-      showError('Укажите название места');
-      return;
-    }
-    setLoading(true);
-    try {
-      const slug = form.slug?.trim() || slugify(form.name);
+    if (!form.name?.trim()) return;
+    const isEdit = Boolean(form.id);
+    await run(isEdit ? 'Место обновлено' : 'Место добавлено', async () => {
+      const slug = form.slug?.trim() || slugify(form.name!);
       const row = {
-        name: form.name.trim(),
+        name: form.name!.trim(),
         slug,
         description: form.description?.trim() || null,
         landmark: form.landmark?.trim() || null,
@@ -64,40 +62,23 @@ export function VenuesSection({ showMessage, showError, loading, setLoading }: A
         sort_order: Number(form.sort_order) || 0,
         is_active: true,
       };
-      if (form.id) {
-        const { error } = await supabase.from('venues').update(row).eq('id', form.id);
-        if (error) throw error;
-        showMessage('Место обновлено');
-      } else {
-        const { error } = await supabase.from('venues').insert(row);
-        if (error) throw error;
-        showMessage('Место добавлено');
-      }
+      const { error } = form.id
+        ? await supabase.from('venues').update(row).eq('id', form.id)
+        : await supabase.from('venues').insert(row);
+      if (error) throw error;
       setEditing(false);
       setForm(empty());
       await load();
-      await refreshAppData();
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function hideVenue(id: string) {
-    setLoading(true);
-    try {
+    await run('Место скрыто', async () => {
       const { error } = await supabase.from('venues').update({ is_active: false }).eq('id', id);
       if (error) throw error;
       setHideId(null);
       await load();
-      await refreshAppData();
-      showMessage('Место скрыто (не удалено)');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   const active = list.filter((v) => v.is_active !== false);
@@ -105,6 +86,7 @@ export function VenuesSection({ showMessage, showError, loading, setLoading }: A
 
   return (
     <div className="space-y-4">
+      <AdminStatusBanner feedback={feedback} />
       <Card className="bg-primary-50 border-primary-100 text-sm text-primary-900">
         <strong>Места на территории.</strong> Участники видят название, ориентир и «как пройти».
         Фото — вставьте ссылку (загрузите файл в Supabase Storage → скопируйте публичную ссылку).
@@ -161,7 +143,9 @@ export function VenuesSection({ showMessage, showError, loading, setLoading }: A
               onChange={(e) => setForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
             />
           </FormField>
-          <Button fullWidth onClick={save} disabled={loading}>Сохранить</Button>
+          <Button fullWidth onClick={save} disabled={saving}>
+            {saving ? 'Сохранение…' : 'Сохранить'}
+          </Button>
           <Button fullWidth variant="secondary" onClick={() => setEditing(false)}>Отмена</Button>
         </Card>
       )}
@@ -190,11 +174,13 @@ export function VenuesSection({ showMessage, showError, loading, setLoading }: A
               <span>{v.name}</span>
               <Button
                 size="sm"
-                onClick={async () => {
-                  await supabase.from('venues').update({ is_active: true }).eq('id', v.id);
-                  await load();
-                  showMessage('Место снова видно');
-                }}
+                onClick={() =>
+                  run('Место снова видно', async () => {
+                    const { error } = await supabase.from('venues').update({ is_active: true }).eq('id', v.id);
+                    if (error) throw error;
+                    await load();
+                  })
+                }
               >
                 Вернуть
               </Button>
@@ -210,7 +196,7 @@ export function VenuesSection({ showMessage, showError, loading, setLoading }: A
         confirmLabel="Скрыть"
         onConfirm={() => hideId && hideVenue(hideId)}
         onCancel={() => setHideId(null)}
-        loading={loading}
+        loading={saving}
       />
     </div>
   );

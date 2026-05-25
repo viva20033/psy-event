@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { useSession } from '@/stores/session';
@@ -34,28 +34,13 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 export function AdminPage() {
   const profile = useSession((s) => s.profile);
   const [tab, setTab] = useState<Tab>('participants');
-  const [toast, setToast] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  const sectionProps = {
-    showMessage: (text: string) => setToast(text),
-    showError: (text: string) => setToast(`⚠ ${text}`),
-    loading,
-    setLoading,
-  };
 
   if (!profile || !isStaffRole(profile.role)) {
     return <Navigate to="/" replace />;
   }
 
   return (
-    <AdminShell toast={toast}>
+    <AdminShell>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {TABS.map((t) => (
@@ -76,13 +61,13 @@ export function AdminPage() {
           ))}
         </div>
 
-        {tab === 'participants' && <ParticipantsSection {...sectionProps} />}
-        {tab === 'venues' && <VenuesSection {...sectionProps} />}
-        {tab === 'days' && <DaysSection {...sectionProps} />}
-        {tab === 'schedule' && <ScheduleSection {...sectionProps} />}
-        {tab === 'groups' && <GroupsSection {...sectionProps} />}
-        {tab === 'announcements' && <AnnouncementsSection {...sectionProps} />}
-        {tab === 'settings' && <SettingsSection {...sectionProps} />}
+        {tab === 'participants' && <ParticipantsSection />}
+        {tab === 'venues' && <VenuesSection />}
+        {tab === 'days' && <DaysSection />}
+        {tab === 'schedule' && <ScheduleSection />}
+        {tab === 'groups' && <GroupsSection />}
+        {tab === 'announcements' && <AnnouncementsSection />}
+        {tab === 'settings' && <SettingsSection />}
       </div>
     </AdminShell>
   );

@@ -1,3 +1,4 @@
+/** @deprecated sections use useAdminFeedback internally */
 export interface AdminSectionProps {
   showMessage: (text: string) => void;
   showError: (text: string) => void;

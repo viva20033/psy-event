@@ -3,17 +3,13 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/admin/FormField';
+import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
+import { useAdminFeedback } from '@/hooks/useAdminFeedback';
 import { supabase } from '@/lib/supabase/client';
 import { getAccessCode } from '@/lib/supabase/client';
-import { refreshAppData } from '@/services/admin';
-import type { AdminSectionProps } from '../types';
 
-export function SettingsSection({
-  showMessage,
-  showError,
-  loading,
-  setLoading,
-}: AdminSectionProps) {
+export function SettingsSection() {
+  const { feedback, saving, run } = useAdminFeedback();
   const [rainMode, setRainMode] = useState(false);
   const [phone, setPhone] = useState('');
 
@@ -24,70 +20,56 @@ export function SettingsSection({
       if (row.key === 'rain_mode') setRainMode(row.value === true || row.value === 'true');
       if (row.key === 'organizer_contact') {
         const v = row.value;
-        if (typeof v === 'string') setPhone(v);
-        else if (typeof v === 'object' && v !== null) setPhone(String(v));
-        else setPhone(String(v ?? '').replace(/^"|"$/g, ''));
+        if (typeof v === 'string') setPhone(v.replace(/^"|"$/g, ''));
+        else setPhone(String(v ?? ''));
       }
     }
   }, []);
 
   useEffect(() => {
-    load().catch((e) => showError(e instanceof Error ? e.message : 'Ошибка'));
-  }, [load, showError]);
+    load().catch(() => undefined);
+  }, [load]);
 
   async function toggleRain(enabled: boolean) {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.rpc('set_rain_mode', {
-        p_access_code: getAccessCode(),
-        p_enabled: enabled,
-      });
-      if (error) throw error;
-      const r = data as { ok: boolean };
-      if (!r.ok) throw new Error('Нет доступа');
-      setRainMode(enabled);
-      await refreshAppData();
-      showMessage(enabled ? 'Дождевой режим включён — везде запасные места' : 'Дождевой режим выключен');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    await run(
+      enabled ? 'Дождевой режим включён' : 'Дождевой режим выключен',
+      async () => {
+        const { data, error } = await supabase.rpc('set_rain_mode', {
+          p_access_code: getAccessCode(),
+          p_enabled: enabled,
+        });
+        if (error) throw error;
+        const r = data as { ok: boolean };
+        if (!r.ok) throw new Error('Нет доступа');
+        setRainMode(enabled);
+      },
+    );
   }
 
   async function savePhone() {
-    setLoading(true);
-    try {
+    await run('Телефон сохранён', async () => {
       const { error } = await supabase
         .from('event_settings')
         .update({ value: phone.trim(), updated_at: new Date().toISOString() })
         .eq('key', 'organizer_contact');
       if (error) throw error;
-      await refreshAppData();
-      showMessage('Контакт организатора сохранён');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   return (
     <div className="space-y-4">
+      <AdminStatusBanner feedback={feedback} />
+
       <Card className="space-y-3">
         <h3 className="font-semibold text-lg">Дождевой режим</h3>
         <p className="text-sm text-slate-600">
-          Одна кнопка для всех: в расписании и на экране «Я потерялся» показываются{' '}
-          <strong>запасные</strong> места. Включайте, когда пошёл дождь.
-        </p>
-        <p className="text-sm font-medium">
-          Сейчас: {rainMode ? 'включён ☔' : 'выключен'}
+          Сейчас: <strong>{rainMode ? 'включён ☔' : 'выключен'}</strong>
         </p>
         <div className="flex gap-2">
-          <Button fullWidth onClick={() => toggleRain(true)} disabled={loading || rainMode}>
-            Включить дождь
+          <Button fullWidth onClick={() => toggleRain(true)} disabled={saving || rainMode}>
+            Включить
           </Button>
-          <Button fullWidth variant="secondary" onClick={() => toggleRain(false)} disabled={loading || !rainMode}>
+          <Button fullWidth variant="secondary" onClick={() => toggleRain(false)} disabled={saving || !rainMode}>
             Выключить
           </Button>
         </div>
@@ -95,26 +77,12 @@ export function SettingsSection({
 
       <Card className="space-y-3">
         <h3 className="font-semibold text-lg">Контакт организатора</h3>
-        <p className="text-sm text-slate-600">
-          Показывается на экране «Я потерялся», если человек не знает, куда идти.
-        </p>
         <FormField label="Телефон">
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 ..." />
         </FormField>
-        <Button fullWidth onClick={savePhone} disabled={loading}>
-          Сохранить телефон
+        <Button fullWidth onClick={savePhone} disabled={saving}>
+          {saving ? 'Сохранение…' : 'Сохранить телефон'}
         </Button>
-      </Card>
-
-      <Card className="text-sm text-slate-600 space-y-2">
-        <p className="font-medium text-slate-800">Порядок заполнения (подсказка)</p>
-        <ol className="list-decimal list-inside space-y-1">
-          <li>Места на территории</li>
-          <li>Дни — указать даты</li>
-          <li>Группы и участники</li>
-          <li>Расписание по дням</li>
-          <li>Коды входа участникам</li>
-        </ol>
       </Card>
     </div>
   );

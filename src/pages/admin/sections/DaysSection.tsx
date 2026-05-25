@@ -3,27 +3,30 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/admin/FormField';
+import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
+import { useAdminFeedback } from '@/hooks/useAdminFeedback';
 import { supabase } from '@/lib/supabase/client';
-import { refreshAppData } from '@/services/admin';
 import type { EventDay } from '@/types';
-import type { AdminSectionProps } from '../types';
 
-export function DaysSection({ showMessage, showError, loading, setLoading }: AdminSectionProps) {
+export function DaysSection() {
+  const { feedback, saving, run } = useAdminFeedback();
   const [days, setDays] = useState<EventDay[]>([]);
   const [editing, setEditing] = useState<EventDay | null>(null);
   const [label, setLabel] = useState('');
   const [date, setDate] = useState('');
   const [isRest, setIsRest] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('event_days').select('*').order('day_index');
     if (error) throw error;
     setDays((data ?? []) as EventDay[]);
+    setLoadError(null);
   }, []);
 
   useEffect(() => {
-    load().catch((e) => showError(e instanceof Error ? e.message : 'Ошибка'));
-  }, [load, showError]);
+    load().catch((e) => setLoadError(e instanceof Error ? e.message : 'Ошибка загрузки'));
+  }, [load]);
 
   function openEdit(d: EventDay) {
     setEditing(d);
@@ -34,8 +37,7 @@ export function DaysSection({ showMessage, showError, loading, setLoading }: Adm
 
   async function save() {
     if (!editing) return;
-    setLoading(true);
-    try {
+    await run('День сохранён', async () => {
       const { error } = await supabase
         .from('event_days')
         .update({
@@ -47,20 +49,20 @@ export function DaysSection({ showMessage, showError, loading, setLoading }: Adm
       if (error) throw error;
       setEditing(null);
       await load();
-      await refreshAppData();
-      showMessage('День сохранён');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   return (
     <div className="space-y-4">
+      <AdminStatusBanner feedback={feedback} />
+      {loadError && (
+        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+          {loadError}
+        </div>
+      )}
+
       <Card className="bg-primary-50 border-primary-100 text-sm text-primary-900">
         Дни интенсива уже созданы. Укажите <strong>дату</strong> и при необходимости переименуйте день.
-        Выходные отметьте галочкой «выходной».
       </Card>
 
       <ul className="space-y-2">
@@ -89,15 +91,19 @@ export function DaysSection({ showMessage, showError, loading, setLoading }: Adm
             <FormField label="Название в приложении">
               <Input value={label} onChange={(e) => setLabel(e.target.value)} />
             </FormField>
-            <FormField label="Дата" hint="Для автоматического «сегодня» на главном экране">
+            <FormField label="Дата" hint="Для «сегодня» на главном экране">
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </FormField>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={isRest} onChange={(e) => setIsRest(e.target.checked)} />
-              Выходной (без основной программы)
+              Выходной
             </label>
-            <Button fullWidth onClick={save} disabled={loading}>Сохранить</Button>
-            <Button fullWidth variant="secondary" onClick={() => setEditing(null)}>Отмена</Button>
+            <Button fullWidth onClick={save} disabled={saving}>
+              {saving ? 'Сохранение…' : 'Сохранить'}
+            </Button>
+            <Button fullWidth variant="secondary" onClick={() => setEditing(null)} disabled={saving}>
+              Отмена
+            </Button>
           </Card>
         </div>
       )}

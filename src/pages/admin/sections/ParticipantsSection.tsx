@@ -4,40 +4,46 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FormField, adminSelectClass } from '@/components/admin/FormField';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
+import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
+import { useAdminFeedback } from '@/hooks/useAdminFeedback';
 import { supabase } from '@/lib/supabase/client';
 import { getAccessCode } from '@/lib/supabase/client';
 import { copyText, loginUrl } from '@/services/admin';
 import { ROLE_LABELS, type Profile, type UserRole } from '@/types';
-import type { AdminSectionProps } from '../types';
 
-export function ParticipantsSection({
-  showMessage,
-  showError,
-  loading,
-  setLoading,
-}: AdminSectionProps) {
+export function ParticipantsSection() {
+  const { feedback, saving, run, setFeedback } = useAdminFeedback();
   const [list, setList] = useState<Profile[]>([]);
   const [search, setSearch] = useState('');
-  const [showInactive, setShowInactive] = useState(false);
+  const [showInactive, setShowInactive] = useState(true);
   const [name, setName] = useState('');
   const [role, setRole] = useState<UserRole>('client');
   const [editing, setEditing] = useState<Profile | null>(null);
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState<UserRole>('client');
   const [deactivateId, setDeactivateId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
+  const [listLoading, setListLoading] = useState(false);
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, full_name, role, access_code, is_active')
-      .order('full_name');
-    if (error) throw error;
-    setList((data ?? []) as Profile[]);
+    setListLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, access_code, is_active')
+        .order('full_name');
+      if (error) throw error;
+      setList((data ?? []) as Profile[]);
+    } finally {
+      setListLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    load().catch((e) => showError(e instanceof Error ? e.message : 'Ошибка загрузки'));
-  }, [load, showError]);
+    load().catch((e) =>
+      setFeedback({ type: 'err', text: e instanceof Error ? e.message : 'Не удалось загрузить список' }),
+    );
+  }, [load, setFeedback]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -51,32 +57,36 @@ export function ParticipantsSection({
     });
   }, [list, search, showInactive]);
 
+  function randomAccessCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  }
+
   async function create() {
     if (!name.trim()) return;
-    setLoading(true);
-    try {
+    await run(`Создан участник. Код появится в списке ниже.`, async () => {
       const { data, error } = await supabase.rpc('admin_create_profile', {
         p_access_code: getAccessCode(),
         p_full_name: name.trim(),
         p_role: role,
       });
       if (error) throw error;
-      const r = data as { ok: boolean; profile?: Profile };
-      if (!r.ok || !r.profile) throw new Error('Не удалось создать');
+      const r = data as { ok: boolean; error?: string; profile?: Profile };
+      if (!r.ok || !r.profile) throw new Error(r.error ?? 'Не удалось создать');
       setName('');
       await load();
-      showMessage(`Создан: ${r.profile.full_name}. Код: ${r.profile.access_code}`);
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+      setFeedback({
+        type: 'ok',
+        text: `Готово: ${r.profile.full_name}, код ${r.profile.access_code}`,
+      });
+    });
   }
 
   async function saveEdit() {
     if (!editing) return;
-    setLoading(true);
-    try {
+    await run('Изменения сохранены', async () => {
       const { error } = await supabase
         .from('profiles')
         .update({ full_name: editName.trim(), role: editRole })
@@ -84,44 +94,23 @@ export function ParticipantsSection({
       if (error) throw error;
       setEditing(null);
       await load();
-      showMessage('Участник сохранён');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function randomAccessCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 8; i++) {
-      code += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return code;
+    });
   }
 
   async function regenerateCode(p: Profile) {
-    setLoading(true);
-    try {
+    await run(`Новый код для ${p.full_name} — смотрите в списке`, async () => {
       const newCode = randomAccessCode();
-      const { error: uerr } = await supabase
+      const { error } = await supabase
         .from('profiles')
         .update({ access_code: newCode })
         .eq('id', p.id);
-      if (uerr) throw uerr;
+      if (error) throw error;
       await load();
-      showMessage(`Новый код для ${p.full_name}: ${newCode}`);
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function setActive(id: string, active: boolean) {
-    setLoading(true);
-    try {
+    await run(active ? 'Участник снова активен' : 'Участник отключён', async () => {
       const { error } = await supabase
         .from('profiles')
         .update({ is_active: active })
@@ -129,26 +118,30 @@ export function ParticipantsSection({
       if (error) throw error;
       setDeactivateId(null);
       await load();
-      showMessage(active ? 'Участник снова активен' : 'Участник отключён');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
+  }
+
+  async function deleteProfile(p: Profile) {
+    await run(`Запись «${p.full_name}» удалена`, async () => {
+      const { error } = await supabase.from('profiles').delete().eq('id', p.id);
+      if (error) throw error;
+      setDeleteTarget(null);
+      await load();
+    });
   }
 
   return (
     <div className="space-y-4">
-      <Card className="space-y-3 bg-primary-50 border-primary-100">
-        <p className="text-sm text-primary-900">
-          <strong>Шаг 1.</strong> Создайте участника — появится код входа. Передайте код или ссылку лично.
-          Ошиблись в имени — нажмите «Изменить».
-        </p>
+      <AdminStatusBanner feedback={feedback} />
+
+      <Card className="space-y-3 bg-primary-50 border-primary-100 text-sm text-primary-900">
+        После «Создать» подождите зелёное сообщение и проверьте список. Дубликаты можно{' '}
+        <strong>удалить</strong> (с подтверждением).
       </Card>
 
       <Card className="space-y-3">
         <h2 className="font-semibold text-lg">Добавить участника</h2>
-        <FormField label="Имя и фамилия" hint="Как в списке группы, например: Мария Иванова">
+        <FormField label="Имя и фамилия">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя Фамилия" />
         </FormField>
         <FormField label="Роль">
@@ -162,13 +155,18 @@ export function ParticipantsSection({
             ))}
           </select>
         </FormField>
-        <Button fullWidth onClick={create} disabled={loading || !name.trim()}>
-          Создать и получить код
+        <Button fullWidth onClick={create} disabled={saving || !name.trim()}>
+          {saving ? 'Создание…' : 'Создать и получить код'}
         </Button>
       </Card>
 
       <Card className="space-y-3">
-        <h2 className="font-semibold text-lg">Список ({filtered.length})</h2>
+        <div className="flex justify-between items-center gap-2">
+          <h2 className="font-semibold text-lg">Список ({filtered.length})</h2>
+          <Button size="sm" variant="secondary" onClick={() => load()} disabled={listLoading}>
+            {listLoading ? '…' : 'Обновить'}
+          </Button>
+        </div>
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -184,14 +182,16 @@ export function ParticipantsSection({
         </label>
 
         {filtered.length === 0 ? (
-          <p className="text-sm text-slate-500 py-4 text-center">Никого не найдено</p>
+          <p className="text-sm text-slate-500 py-4 text-center">
+            {listLoading ? 'Загрузка…' : 'Никого не найдено — нажмите «Обновить»'}
+          </p>
         ) : (
           <ul className="space-y-3">
             {filtered.map((p) => (
               <li
                 key={p.id}
                 className={`rounded-xl border p-3 space-y-2 ${
-                  p.is_active === false ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-slate-200 bg-white'
+                  p.is_active === false ? 'bg-slate-50 opacity-75' : 'bg-white'
                 }`}
               >
                 <div className="flex justify-between gap-2">
@@ -207,20 +207,20 @@ export function ParticipantsSection({
                     variant="secondary"
                     onClick={async () => {
                       const ok = await copyText(p.access_code);
-                      showMessage(ok ? 'Код скопирован' : 'Не удалось скопировать');
+                      setFeedback({ type: ok ? 'ok' : 'err', text: ok ? 'Код скопирован' : 'Не удалось скопировать' });
                     }}
                   >
-                    Копировать код
+                    Код
                   </Button>
                   <Button
                     size="sm"
                     variant="secondary"
                     onClick={async () => {
                       const ok = await copyText(loginUrl(p.access_code));
-                      showMessage(ok ? 'Ссылка скопирована' : 'Не удалось скопировать');
+                      setFeedback({ type: ok ? 'ok' : 'err', text: ok ? 'Ссылка скопирована' : 'Не удалось' });
                     }}
                   >
-                    Ссылка для входа
+                    Ссылка
                   </Button>
                   <Button
                     size="sm"
@@ -233,7 +233,7 @@ export function ParticipantsSection({
                   >
                     Изменить
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => regenerateCode(p)} disabled={loading}>
+                  <Button size="sm" variant="ghost" onClick={() => regenerateCode(p)} disabled={saving}>
                     Новый код
                   </Button>
                   {p.is_active !== false ? (
@@ -241,10 +241,13 @@ export function ParticipantsSection({
                       Отключить
                     </Button>
                   ) : (
-                    <Button size="sm" onClick={() => setActive(p.id, true)} disabled={loading}>
-                      Включить снова
+                    <Button size="sm" onClick={() => setActive(p.id, true)} disabled={saving}>
+                      Включить
                     </Button>
                   )}
+                  <Button size="sm" variant="danger" onClick={() => setDeleteTarget(p)}>
+                    Удалить
+                  </Button>
                 </div>
               </li>
             ))}
@@ -270,7 +273,9 @@ export function ParticipantsSection({
                 ))}
               </select>
             </FormField>
-            <Button fullWidth onClick={saveEdit} disabled={loading}>Сохранить</Button>
+            <Button fullWidth onClick={saveEdit} disabled={saving}>
+              {saving ? 'Сохранение…' : 'Сохранить'}
+            </Button>
             <Button fullWidth variant="secondary" onClick={() => setEditing(null)}>Отмена</Button>
           </Card>
         </div>
@@ -279,11 +284,25 @@ export function ParticipantsSection({
       <ConfirmDialog
         open={!!deactivateId}
         title="Отключить участника?"
-        message="Код перестанет работать. Запись останется — можно включить снова."
+        message="Код перестанет работать. Запись останется в базе."
         confirmLabel="Отключить"
         onConfirm={() => deactivateId && setActive(deactivateId, false)}
         onCancel={() => setDeactivateId(null)}
-        loading={loading}
+        loading={saving}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Удалить участника навсегда?"
+        message={
+          deleteTarget
+            ? `Будет удалён: ${deleteTarget.full_name} (код ${deleteTarget.access_code}). Это нельзя отменить. Дубликаты лучше удалить так.`
+            : ''
+        }
+        confirmLabel="Да, удалить"
+        onConfirm={() => deleteTarget && deleteProfile(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
+        loading={saving}
       />
     </div>
   );

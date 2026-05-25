@@ -3,10 +3,9 @@ import type { ReactNode } from 'react';
 
 interface AdminShellProps {
   children: ReactNode;
-  toast?: string | null;
 }
 
-export function AdminShell({ children, toast }: AdminShellProps) {
+export function AdminShell({ children }: AdminShellProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-slate-100">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">
@@ -25,12 +24,6 @@ export function AdminShell({ children, toast }: AdminShellProps) {
       </header>
 
       <main className="mx-auto w-full max-w-lg flex-1 px-4 py-4 pb-8">{children}</main>
-
-      {toast && (
-        <div className="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-lg rounded-xl bg-primary-800 px-4 py-3 text-center text-sm text-white shadow-lg">
-          {toast}
-        </div>
-      )}
     </div>
   );
 }

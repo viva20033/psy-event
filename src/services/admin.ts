@@ -1,12 +1,11 @@
 import { pullAllData } from '@/lib/offline/sync';
 
-/** После любого изменения в админке — обновить кэш участников */
-export async function refreshAppData(): Promise<void> {
-  try {
-    await pullAllData();
-  } catch {
-    // офлайн — не критично для админки
-  }
+/** Фоновое обновление кэша приложения (не блокирует сохранение в админке) */
+export function refreshAppData(): void {
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('timeout')), 12_000);
+  });
+  void Promise.race([pullAllData(), timeout]).catch(() => undefined);
 }
 
 export async function copyText(text: string): Promise<boolean> {

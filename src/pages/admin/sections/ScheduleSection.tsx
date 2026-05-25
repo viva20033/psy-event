@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FormField, adminSelectClass, adminTextareaClass } from '@/components/admin/FormField';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
+import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
+import { useAdminFeedback } from '@/hooks/useAdminFeedback';
 import { supabase } from '@/lib/supabase/client';
 import { isoToLocalInput, localInputToIso } from '@/lib/utils/datetime';
-import { refreshAppData } from '@/services/admin';
 import { ROLE_LABELS, type EventAudience, type EventDay, type Group, type Profile, type ScheduleEvent, type UserRole, type Venue } from '@/types';
-import type { AdminSectionProps } from '../types';
 
 type AudienceMode = 'all' | 'role' | 'group';
 
@@ -25,7 +25,8 @@ const emptyEvent = () => ({
   group_id: '',
 });
 
-export function ScheduleSection({ showMessage, showError, loading, setLoading }: AdminSectionProps) {
+export function ScheduleSection() {
+  const { feedback, saving, run } = useAdminFeedback();
   const [days, setDays] = useState<EventDay[]>([]);
   const [dayId, setDayId] = useState('');
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
@@ -68,12 +69,12 @@ export function ScheduleSection({ showMessage, showError, loading, setLoading }:
   }, [dayId]);
 
   useEffect(() => {
-    loadMeta().catch((e) => showError(e instanceof Error ? e.message : 'Ошибка'));
-  }, [loadMeta, showError]);
+    loadMeta().catch(() => undefined);
+  }, [loadMeta]);
 
   useEffect(() => {
-    loadEvents().catch((e) => showError(e instanceof Error ? e.message : 'Ошибка'));
-  }, [loadEvents, showError]);
+    loadEvents().catch(() => undefined);
+  }, [loadEvents]);
 
   async function openEdit(ev: ScheduleEvent) {
     const { data: aud } = await supabase
@@ -131,12 +132,9 @@ export function ScheduleSection({ showMessage, showError, loading, setLoading }:
   }
 
   async function save() {
-    if (!dayId || !form.title.trim() || !form.starts_at || !form.ends_at) {
-      showError('Заполните название, начало и конец');
-      return;
-    }
-    setLoading(true);
-    try {
+    if (!dayId || !form.title.trim() || !form.starts_at || !form.ends_at) return;
+    const wasEdit = Boolean(editId);
+    await run(wasEdit ? 'Событие обновлено' : 'Событие добавлено', async () => {
       const row = {
         event_day_id: dayId,
         title: form.title.trim(),
@@ -161,35 +159,23 @@ export function ScheduleSection({ showMessage, showError, loading, setLoading }:
       setEditId(null);
       setForm(emptyEvent());
       await loadEvents();
-      await refreshAppData();
-      showMessage(editId ? 'Событие обновлено' : 'Событие добавлено');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function remove(id: string) {
-    setLoading(true);
-    try {
+    await run('Событие удалено', async () => {
       const { error } = await supabase.from('schedule_events').delete().eq('id', id);
       if (error) throw error;
       setDeleteId(null);
       await loadEvents();
-      await refreshAppData();
-      showMessage('Событие удалено');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   const venueName = (id: string | null) => venues.find((v) => v.id === id)?.name ?? '—';
 
   return (
     <div className="space-y-4">
+      <AdminStatusBanner feedback={feedback} />
       <Card className="bg-primary-50 border-primary-100 text-sm text-primary-900">
         <strong>Расписание.</strong> Выберите день → добавьте события. Укажите основное и запасное место (на дождь).
         «Кому показать» — всем, одной роли или одной группе.
@@ -279,7 +265,9 @@ export function ScheduleSection({ showMessage, showError, loading, setLoading }:
               </select>
             </FormField>
           )}
-          <Button fullWidth onClick={save} disabled={loading}>Сохранить</Button>
+          <Button fullWidth onClick={save} disabled={saving}>
+            {saving ? 'Сохранение…' : 'Сохранить'}
+          </Button>
           <Button fullWidth variant="secondary" onClick={() => setShowForm(false)}>Отмена</Button>
         </Card>
       )}
@@ -313,7 +301,7 @@ export function ScheduleSection({ showMessage, showError, loading, setLoading }:
         message="Его не будет в расписании участников. Это действие нельзя отменить."
         onConfirm={() => deleteId && remove(deleteId)}
         onCancel={() => setDeleteId(null)}
-        loading={loading}
+        loading={saving}
       />
     </div>
   );

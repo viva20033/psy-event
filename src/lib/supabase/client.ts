@@ -6,10 +6,15 @@ let client: SupabaseClient | null = null;
 
 export function setAccessCode(code: string | null): void {
   accessCode = code;
+  client = null;
 }
 
 export function getAccessCode(): string | null {
   return accessCode;
+}
+
+function buildHeaders(): Record<string, string> {
+  return accessCode ? { 'x-access-code': accessCode } : {};
 }
 
 function buildClient(): SupabaseClient {
@@ -20,6 +25,7 @@ function buildClient(): SupabaseClient {
   }
   return createClient(env.supabaseUrl, env.supabaseAnonKey, {
     global: {
+      headers: buildHeaders(),
       fetch: (url, options = {}) => {
         const headers = new Headers(options.headers);
         if (accessCode) {

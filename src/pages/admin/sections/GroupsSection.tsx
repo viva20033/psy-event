@@ -4,11 +4,13 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FormField, adminSelectClass, adminTextareaClass } from '@/components/admin/FormField';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
+import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
+import { useAdminFeedback } from '@/hooks/useAdminFeedback';
 import { supabase } from '@/lib/supabase/client';
 import { GROUP_TYPE_LABELS, ROLE_LABELS, type Group, type GroupMember, type GroupType, type Profile } from '@/types';
-import type { AdminSectionProps } from '../types';
 
-export function GroupsSection({ showMessage, showError, loading, setLoading }: AdminSectionProps) {
+export function GroupsSection() {
+  const { feedback, saving, run } = useAdminFeedback();
   const [groups, setGroups] = useState<Group[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [members, setMembers] = useState<GroupMember[]>([]);
@@ -62,8 +64,8 @@ export function GroupsSection({ showMessage, showError, loading, setLoading }: A
   }, []);
 
   useEffect(() => {
-    load().catch((e) => showError(e instanceof Error ? e.message : 'Ошибка'));
-  }, [load, showError]);
+    load().catch(() => undefined);
+  }, [load]);
 
   useEffect(() => {
     if (selectedId) loadMembers(selectedId).catch(() => undefined);
@@ -71,8 +73,7 @@ export function GroupsSection({ showMessage, showError, loading, setLoading }: A
 
   async function createGroup() {
     if (!name.trim()) return;
-    setLoading(true);
-    try {
+    await run('Группа создана', async () => {
       const { error } = await supabase.from('groups').insert({
         name: name.trim(),
         group_type: groupType,
@@ -83,18 +84,12 @@ export function GroupsSection({ showMessage, showError, loading, setLoading }: A
       setDescription('');
       setCreating(false);
       await load();
-      showMessage('Группа создана');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function addMember() {
     if (!selectedId || !addProfileId) return;
-    setLoading(true);
-    try {
+    await run('Добавлен в группу', async () => {
       const { error } = await supabase.from('group_members').insert({
         group_id: selectedId,
         profile_id: addProfileId,
@@ -103,49 +98,33 @@ export function GroupsSection({ showMessage, showError, loading, setLoading }: A
       if (error) throw error;
       setAddProfileId('');
       await loadMembers(selectedId);
-      showMessage('Участник добавлен в группу');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function removeMember(memberId: string) {
     if (!selectedId) return;
-    setLoading(true);
-    try {
+    await run('Убран из группы', async () => {
       const { error } = await supabase.from('group_members').delete().eq('id', memberId);
       if (error) throw error;
       await loadMembers(selectedId);
-      showMessage('Убран из группы');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   async function deleteGroup(id: string) {
-    setLoading(true);
-    try {
+    await run('Группа удалена', async () => {
       const { error } = await supabase.from('groups').delete().eq('id', id);
       if (error) throw error;
       setDeleteGroupId(null);
       setSelectedId(null);
       await load();
-      showMessage('Группа удалена');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   const selected = groups.find((g) => g.id === selectedId);
 
   return (
     <div className="space-y-4">
+      <AdminStatusBanner feedback={feedback} />
       <Card className="bg-primary-50 border-primary-100 text-sm text-primary-900">
         Группы для расписания и процесс-групп. Состав можно менять — ошиблись, убрали человека, добавили другого.
       </Card>
@@ -167,7 +146,9 @@ export function GroupsSection({ showMessage, showError, loading, setLoading }: A
           <FormField label="Заметка (необязательно)">
             <textarea className={adminTextareaClass} value={description} onChange={(e) => setDescription(e.target.value)} />
           </FormField>
-          <Button fullWidth onClick={createGroup} disabled={loading}>Создать</Button>
+          <Button fullWidth onClick={createGroup} disabled={saving}>
+            {saving ? '…' : 'Создать'}
+          </Button>
           <Button fullWidth variant="secondary" onClick={() => setCreating(false)}>Отмена</Button>
         </Card>
       )}
@@ -202,7 +183,7 @@ export function GroupsSection({ showMessage, showError, loading, setLoading }: A
               ))}
             </select>
           </FormField>
-          <Button onClick={addMember} disabled={loading || !addProfileId}>Добавить</Button>
+          <Button onClick={addMember} disabled={saving || !addProfileId}>Добавить</Button>
           <ul className="space-y-2">
             {members.map((m) => (
               <li key={m.id} className="flex justify-between items-center text-sm border-b py-2">
@@ -221,7 +202,7 @@ export function GroupsSection({ showMessage, showError, loading, setLoading }: A
         message="Удалится группа и весь её состав. События с этой группой в расписании проверьте отдельно."
         onConfirm={() => deleteGroupId && deleteGroup(deleteGroupId)}
         onCancel={() => setDeleteGroupId(null)}
-        loading={loading}
+        loading={saving}
       />
     </div>
   );
