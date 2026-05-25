@@ -80,6 +80,13 @@ supabase/migrations/
 
 В `src/config/feature-flags.ts`: chat, gallery, workshops, networking, push, polls, materials, notes — архитектурно зарезервированы, `false`.
 
+## Иконка PWA
+
+1. Положите исходник в `public/icons/source.png` (квадрат, от 512×512 px).
+2. Сгенерируйте размеры: `npm run icons`
+3. Закоммитьте `public/icons/*.png` и сделайте deploy на Vercel.
+4. На телефоне переустановите ярлык (или удалите старый и добавьте снова), чтобы подтянулась новая иконка.
+
 ## Deploy (Vercel)
 
 ```bash
