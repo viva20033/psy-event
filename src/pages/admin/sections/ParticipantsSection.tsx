@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -6,14 +6,21 @@ import { FormField, adminSelectClass } from '@/components/admin/FormField';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
 import { useAdminFeedback } from '@/hooks/useAdminFeedback';
+import { useAdminData } from '@/stores/adminData';
 import { supabase } from '@/lib/supabase/client';
 import { getAccessCode } from '@/lib/supabase/client';
-import { copyText, loginUrl } from '@/services/admin';
+import { copyText } from '@/services/admin';
 import { ROLE_LABELS, type Profile, type UserRole } from '@/types';
 
 export function ParticipantsSection() {
   const { feedback, saving, run, setFeedback } = useAdminFeedback();
-  const [list, setList] = useState<Profile[]>([]);
+  const list = useAdminData((s) => s.profiles);
+  const listLoading = useAdminData((s) => s.loading.profiles);
+  const ensureProfiles = useAdminData((s) => s.ensureProfiles);
+  const upsertProfile = useAdminData((s) => s.upsertProfile);
+  const removeProfileLocal = useAdminData((s) => s.removeProfileLocal);
+  const patchProfile = useAdminData((s) => s.patchProfile);
+
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(true);
   const [name, setName] = useState('');
@@ -23,27 +30,10 @@ export function ParticipantsSection() {
   const [editRole, setEditRole] = useState<UserRole>('client');
   const [deactivateId, setDeactivateId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
-  const [listLoading, setListLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    setListLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, role, access_code, is_active')
-        .order('full_name');
-      if (error) throw error;
-      setList((data ?? []) as Profile[]);
-    } finally {
-      setListLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    load().catch((e) =>
-      setFeedback({ type: 'err', text: e instanceof Error ? e.message : 'Не удалось загрузить список' }),
-    );
-  }, [load, setFeedback]);
+    void ensureProfiles();
+  }, [ensureProfiles]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -66,7 +56,7 @@ export function ParticipantsSection() {
 
   async function create() {
     if (!name.trim()) return;
-    await run(`Создан участник. Код появится в списке ниже.`, async () => {
+    await run(`Участник создан`, async () => {
       const { data, error } = await supabase.rpc('admin_create_profile', {
         p_access_code: getAccessCode(),
         p_full_name: name.trim(),
@@ -75,8 +65,8 @@ export function ParticipantsSection() {
       if (error) throw error;
       const r = data as { ok: boolean; error?: string; profile?: Profile };
       if (!r.ok || !r.profile) throw new Error(r.error ?? 'Не удалось создать');
+      upsertProfile(r.profile);
       setName('');
-      await load();
       setFeedback({
         type: 'ok',
         text: `Готово: ${r.profile.full_name}, код ${r.profile.access_code}`,
@@ -86,58 +76,68 @@ export function ParticipantsSection() {
 
   async function saveEdit() {
     if (!editing) return;
-    await run('Изменения сохранены', async () => {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ full_name: editName.trim(), role: editRole })
-        .eq('id', editing.id);
-      if (error) throw error;
-      setEditing(null);
-      await load();
+    const id = editing.id;
+    const patch = { full_name: editName.trim(), role: editRole };
+    patchProfile(id, patch);
+    setEditing(null);
+    await run('Сохранено', async () => {
+      const { error } = await supabase.from('profiles').update(patch).eq('id', id);
+      if (error) {
+        void ensureProfiles(true);
+        throw error;
+      }
     });
   }
 
   async function regenerateCode(p: Profile) {
-    await run(`Новый код для ${p.full_name} — смотрите в списке`, async () => {
-      const newCode = randomAccessCode();
+    const newCode = randomAccessCode();
+    patchProfile(p.id, { access_code: newCode });
+    await run(`Новый код: ${newCode}`, async () => {
       const { error } = await supabase
         .from('profiles')
         .update({ access_code: newCode })
         .eq('id', p.id);
-      if (error) throw error;
-      await load();
+      if (error) {
+        void ensureProfiles(true);
+        throw error;
+      }
     });
   }
 
   async function setActive(id: string, active: boolean) {
-    await run(active ? 'Участник снова активен' : 'Участник отключён', async () => {
+    patchProfile(id, { is_active: active });
+    setDeactivateId(null);
+    await run(active ? 'Включён' : 'Отключён', async () => {
       const { error } = await supabase
         .from('profiles')
         .update({ is_active: active })
         .eq('id', id);
-      if (error) throw error;
-      setDeactivateId(null);
-      await load();
+      if (error) {
+        void ensureProfiles(true);
+        throw error;
+      }
     });
   }
 
   async function deleteProfile(p: Profile) {
-    await run(`Запись «${p.full_name}» удалена`, async () => {
+    setDeleteTarget(null);
+    removeProfileLocal(p.id);
+    setFeedback({ type: 'ok', text: `«${p.full_name}» удалён из списка` });
+    try {
       const { error } = await supabase.from('profiles').delete().eq('id', p.id);
       if (error) throw error;
-      setDeleteTarget(null);
-      await load();
-    });
+    } catch (e) {
+      void ensureProfiles(true);
+      setFeedback({
+        type: 'err',
+        text: e instanceof Error ? e.message : 'Не удалось удалить — список обновлён',
+      });
+    }
   }
 
   return (
     <div className="space-y-4">
       <AdminStatusBanner feedback={feedback} />
-
-      <Card className="space-y-3 bg-primary-50 border-primary-100 text-sm text-primary-900">
-        После «Создать» подождите зелёное сообщение и проверьте список. Дубликаты можно{' '}
-        <strong>удалить</strong> (с подтверждением).
-      </Card>
 
       <Card className="space-y-3">
         <h2 className="font-semibold text-lg">Добавить участника</h2>
@@ -156,21 +156,21 @@ export function ParticipantsSection() {
           </select>
         </FormField>
         <Button fullWidth onClick={create} disabled={saving || !name.trim()}>
-          {saving ? 'Создание…' : 'Создать и получить код'}
+          {saving ? 'Создание…' : 'Создать'}
         </Button>
       </Card>
 
       <Card className="space-y-3">
         <div className="flex justify-between items-center gap-2">
           <h2 className="font-semibold text-lg">Список ({filtered.length})</h2>
-          <Button size="sm" variant="secondary" onClick={() => load()} disabled={listLoading}>
-            {listLoading ? '…' : 'Обновить'}
+          <Button size="sm" variant="secondary" onClick={() => ensureProfiles(true)} disabled={listLoading}>
+            Обновить
           </Button>
         </div>
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Поиск по имени или коду"
+          placeholder="Поиск"
         />
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input
@@ -181,10 +181,10 @@ export function ParticipantsSection() {
           Показать отключённых
         </label>
 
-        {filtered.length === 0 ? (
-          <p className="text-sm text-slate-500 py-4 text-center">
-            {listLoading ? 'Загрузка…' : 'Никого не найдено — нажмите «Обновить»'}
-          </p>
+        {listLoading && list.length === 0 ? (
+          <p className="text-sm text-slate-500 py-4 text-center">Загрузка…</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-slate-500 py-4 text-center">Никого нет</p>
         ) : (
           <ul className="space-y-3">
             {filtered.map((p) => (
@@ -202,35 +202,10 @@ export function ParticipantsSection() {
                   <p className="font-mono text-sm font-bold text-primary-700">{p.access_code}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={async () => {
-                      const ok = await copyText(p.access_code);
-                      setFeedback({ type: ok ? 'ok' : 'err', text: ok ? 'Код скопирован' : 'Не удалось скопировать' });
-                    }}
-                  >
+                  <Button size="sm" variant="secondary" onClick={() => copyText(p.access_code).then((ok) => setFeedback({ type: ok ? 'ok' : 'err', text: ok ? 'Код скопирован' : 'Ошибка' }))}>
                     Код
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={async () => {
-                      const ok = await copyText(loginUrl(p.access_code));
-                      setFeedback({ type: ok ? 'ok' : 'err', text: ok ? 'Ссылка скопирована' : 'Не удалось' });
-                    }}
-                  >
-                    Ссылка
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setEditing(p);
-                      setEditName(p.full_name);
-                      setEditRole(p.role);
-                    }}
-                  >
+                  <Button size="sm" variant="ghost" onClick={() => { setEditing(p); setEditName(p.full_name); setEditRole(p.role); }}>
                     Изменить
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => regenerateCode(p)} disabled={saving}>
@@ -258,24 +233,14 @@ export function ParticipantsSection() {
       {editing && (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-4">
           <Card className="w-full max-w-lg space-y-3">
-            <h3 className="font-semibold">Изменить участника</h3>
-            <FormField label="Имя">
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </FormField>
-            <FormField label="Роль">
-              <select
-                className={adminSelectClass}
-                value={editRole}
-                onChange={(e) => setEditRole(e.target.value as UserRole)}
-              >
-                {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
-                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                ))}
-              </select>
-            </FormField>
-            <Button fullWidth onClick={saveEdit} disabled={saving}>
-              {saving ? 'Сохранение…' : 'Сохранить'}
-            </Button>
+            <h3 className="font-semibold">Изменить</h3>
+            <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+            <select className={adminSelectClass} value={editRole} onChange={(e) => setEditRole(e.target.value as UserRole)}>
+              {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              ))}
+            </select>
+            <Button fullWidth onClick={saveEdit} disabled={saving}>Сохранить</Button>
             <Button fullWidth variant="secondary" onClick={() => setEditing(null)}>Отмена</Button>
           </Card>
         </div>
@@ -283,8 +248,8 @@ export function ParticipantsSection() {
 
       <ConfirmDialog
         open={!!deactivateId}
-        title="Отключить участника?"
-        message="Код перестанет работать. Запись останется в базе."
+        title="Отключить?"
+        message="Код перестанет работать."
         confirmLabel="Отключить"
         onConfirm={() => deactivateId && setActive(deactivateId, false)}
         onCancel={() => setDeactivateId(null)}
@@ -293,16 +258,12 @@ export function ParticipantsSection() {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Удалить участника навсегда?"
-        message={
-          deleteTarget
-            ? `Будет удалён: ${deleteTarget.full_name} (код ${deleteTarget.access_code}). Это нельзя отменить. Дубликаты лучше удалить так.`
-            : ''
-        }
-        confirmLabel="Да, удалить"
+        title="Удалить навсегда?"
+        message={deleteTarget ? `Удалить «${deleteTarget.full_name}»? Список обновится сразу.` : ''}
+        confirmLabel="Удалить"
         onConfirm={() => deleteTarget && deleteProfile(deleteTarget)}
         onCancel={() => setDeleteTarget(null)}
-        loading={saving}
+        loading={false}
       />
     </div>
   );

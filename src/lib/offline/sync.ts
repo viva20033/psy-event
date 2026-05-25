@@ -136,8 +136,8 @@ export async function flushSyncQueue(): Promise<void> {
   await pullConnections();
 }
 
-export async function syncWhenOnline(): Promise<void> {
+export async function syncWhenOnline(opts?: { skipPull?: boolean }): Promise<void> {
   if (!navigator.onLine) return;
   await flushSyncQueue();
-  await pullAllData();
+  if (!opts?.skipPull) await pullAllData();
 }

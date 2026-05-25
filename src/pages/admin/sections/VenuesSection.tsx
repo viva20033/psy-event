@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -6,6 +6,7 @@ import { FormField, adminTextareaClass } from '@/components/admin/FormField';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
 import { useAdminFeedback } from '@/hooks/useAdminFeedback';
+import { useAdminData } from '@/stores/adminData';
 import { supabase } from '@/lib/supabase/client';
 import { slugify } from '@/lib/utils/slug';
 import type { Venue } from '@/types';
@@ -21,21 +22,17 @@ const empty = (): Partial<Venue> => ({
 });
 
 export function VenuesSection() {
-  const { feedback, saving, run } = useAdminFeedback();
-  const [list, setList] = useState<Venue[]>([]);
+  const { feedback, saving, run, setFeedback } = useAdminFeedback();
+  const list = useAdminData((s) => s.venues);
+  const ensureVenues = useAdminData((s) => s.ensureVenues);
+  const patchVenue = useAdminData((s) => s.patchVenue);
   const [form, setForm] = useState<Partial<Venue> & { id?: string }>(empty());
   const [editing, setEditing] = useState(false);
   const [hideId, setHideId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    const { data, error } = await supabase.from('venues').select('*').order('sort_order');
-    if (error) throw error;
-    setList((data ?? []) as Venue[]);
-  }, []);
-
   useEffect(() => {
-    load().catch(() => undefined);
-  }, [load]);
+    void ensureVenues();
+  }, [ensureVenues]);
 
   function startCreate() {
     setForm(empty());
@@ -62,23 +59,40 @@ export function VenuesSection() {
         sort_order: Number(form.sort_order) || 0,
         is_active: true,
       };
-      const { error } = form.id
-        ? await supabase.from('venues').update(row).eq('id', form.id)
-        : await supabase.from('venues').insert(row);
+      const { data, error } = form.id
+        ? await supabase.from('venues').update(row).eq('id', form.id).select().single()
+        : await supabase.from('venues').insert(row).select().single();
       if (error) throw error;
+      if (data) patchVenue(data.id, data as Venue);
       setEditing(false);
       setForm(empty());
-      await load();
+      if (!isEdit) void ensureVenues(true);
     });
   }
 
   async function hideVenue(id: string) {
-    await run('Место скрыто', async () => {
+    setHideId(null);
+    patchVenue(id, { is_active: false });
+    try {
       const { error } = await supabase.from('venues').update({ is_active: false }).eq('id', id);
       if (error) throw error;
-      setHideId(null);
-      await load();
-    });
+      setFeedback({ type: 'ok', text: 'Место скрыто' });
+    } catch (e) {
+      void ensureVenues(true);
+      setFeedback({ type: 'err', text: e instanceof Error ? e.message : 'Не удалось скрыть' });
+    }
+  }
+
+  async function restoreVenue(id: string) {
+    patchVenue(id, { is_active: true });
+    try {
+      const { error } = await supabase.from('venues').update({ is_active: true }).eq('id', id);
+      if (error) throw error;
+      setFeedback({ type: 'ok', text: 'Место снова видно' });
+    } catch (e) {
+      void ensureVenues(true);
+      setFeedback({ type: 'err', text: e instanceof Error ? e.message : 'Не удалось вернуть' });
+    }
   }
 
   const active = list.filter((v) => v.is_active !== false);
@@ -172,18 +186,7 @@ export function VenuesSection() {
           {hidden.map((v) => (
             <div key={v.id} className="flex justify-between py-1 text-sm">
               <span>{v.name}</span>
-              <Button
-                size="sm"
-                onClick={() =>
-                  run('Место снова видно', async () => {
-                    const { error } = await supabase.from('venues').update({ is_active: true }).eq('id', v.id);
-                    if (error) throw error;
-                    await load();
-                  })
-                }
-              >
-                Вернуть
-              </Button>
+              <Button size="sm" onClick={() => restoreVenue(v.id)}>Вернуть</Button>
             </div>
           ))}
         </Card>
@@ -196,7 +199,7 @@ export function VenuesSection() {
         confirmLabel="Скрыть"
         onConfirm={() => hideId && hideVenue(hideId)}
         onCancel={() => setHideId(null)}
-        loading={saving}
+        loading={false}
       />
     </div>
   );

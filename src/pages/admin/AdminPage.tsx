@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { useSession } from '@/stores/session';
+import { useAdminData } from '@/stores/adminData';
 import { isStaffRole } from '@/types';
 import { cn } from '@/lib/utils/cn';
 import { ParticipantsSection } from './sections/ParticipantsSection';
@@ -34,6 +35,35 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 export function AdminPage() {
   const profile = useSession((s) => s.profile);
   const [tab, setTab] = useState<Tab>('participants');
+  const [mountedTabs, setMountedTabs] = useState<Set<Tab>>(() => new Set(['participants']));
+  const prefetchCommon = useAdminData((s) => s.prefetchCommon);
+
+  useEffect(() => {
+    setMountedTabs((prev) => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
+  }, [tab]);
+
+  useEffect(() => {
+    void prefetchCommon();
+  }, [prefetchCommon]);
+
+  const tabPanels = useMemo(
+    () =>
+      ({
+        participants: <ParticipantsSection />,
+        venues: <VenuesSection />,
+        days: <DaysSection />,
+        schedule: <ScheduleSection />,
+        groups: <GroupsSection />,
+        announcements: <AnnouncementsSection />,
+        settings: <SettingsSection />,
+      }) satisfies Record<Tab, ReactNode>,
+    [],
+  );
 
   if (!profile || !isStaffRole(profile.role)) {
     return <Navigate to="/" replace />;
@@ -61,13 +91,14 @@ export function AdminPage() {
           ))}
         </div>
 
-        {tab === 'participants' && <ParticipantsSection />}
-        {tab === 'venues' && <VenuesSection />}
-        {tab === 'days' && <DaysSection />}
-        {tab === 'schedule' && <ScheduleSection />}
-        {tab === 'groups' && <GroupsSection />}
-        {tab === 'announcements' && <AnnouncementsSection />}
-        {tab === 'settings' && <SettingsSection />}
+        {/* Вкладка монтируется при первом открытии и остаётся в DOM — без повторной загрузки */}
+        {TABS.map((t) =>
+          mountedTabs.has(t.id) ? (
+            <div key={t.id} className={tab === t.id ? '' : 'hidden'}>
+              {tabPanels[t.id]}
+            </div>
+          ) : null,
+        )}
       </div>
     </AdminShell>
   );

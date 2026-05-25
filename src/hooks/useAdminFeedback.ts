@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from 'react';
-import { refreshAppData } from '@/services/admin';
 
 export type AdminFeedback = { type: 'ok' | 'err'; text: string } | null;
 
@@ -28,7 +27,6 @@ export function useAdminFeedback() {
     try {
       await action();
       setFeedback({ type: 'ok', text: successText });
-      void refreshAppData();
     } catch (e) {
       setFeedback({ type: 'err', text: formatSaveError(e) });
       throw e;
