@@ -1,163 +1,89 @@
-import { useState } from 'react';
-import { AppShell } from '@/components/layout/AppShell';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import { AdminShell } from '@/components/admin/AdminShell';
 import { useSession } from '@/stores/session';
-import { isStaffRole, ROLE_LABELS, type UserRole } from '@/types';
-import { supabase } from '@/lib/supabase/client';
-import { getAccessCode } from '@/lib/supabase/client';
-import { pullAllData } from '@/lib/offline/sync';
+import { isStaffRole } from '@/types';
+import { cn } from '@/lib/utils/cn';
+import { ParticipantsSection } from './sections/ParticipantsSection';
+import { VenuesSection } from './sections/VenuesSection';
+import { DaysSection } from './sections/DaysSection';
+import { ScheduleSection } from './sections/ScheduleSection';
+import { GroupsSection } from './sections/GroupsSection';
+import { AnnouncementsSection } from './sections/AnnouncementsSection';
+import { SettingsSection } from './sections/SettingsSection';
 
-type Tab = 'participants' | 'announcements' | 'settings';
+type Tab =
+  | 'participants'
+  | 'venues'
+  | 'days'
+  | 'schedule'
+  | 'groups'
+  | 'announcements'
+  | 'settings';
+
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'participants', label: 'Участники', icon: '👤' },
+  { id: 'venues', label: 'Места', icon: '📍' },
+  { id: 'days', label: 'Дни', icon: '📆' },
+  { id: 'schedule', label: 'Расписание', icon: '🕐' },
+  { id: 'groups', label: 'Группы', icon: '👥' },
+  { id: 'announcements', label: 'Объявления', icon: '📢' },
+  { id: 'settings', label: 'Настройки', icon: '⚙️' },
+];
 
 export function AdminPage() {
   const profile = useSession((s) => s.profile);
   const [tab, setTab] = useState<Tab>('participants');
-  const [name, setName] = useState('');
-  const [role, setRole] = useState<UserRole>('client');
-  const [annTitle, setAnnTitle] = useState('');
-  const [annBody, setAnnBody] = useState('');
-  const [result, setResult] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const sectionProps = {
+    showMessage: (text: string) => setToast(text),
+    showError: (text: string) => setToast(`⚠ ${text}`),
+    loading,
+    setLoading,
+  };
+
   if (!profile || !isStaffRole(profile.role)) {
-    return (
-      <AppShell title="Админка">
-        <Card><p>Доступ только для организаторов</p></Card>
-      </AppShell>
-    );
+    return <Navigate to="/" replace />;
   }
-
-  async function createParticipant() {
-    setLoading(true);
-    setResult('');
-    try {
-      const { data, error } = await supabase.rpc('admin_create_profile', {
-        p_access_code: getAccessCode(),
-        p_full_name: name,
-        p_role: role,
-      });
-      if (error) throw error;
-      const r = data as { ok: boolean; profile?: { access_code: string; full_name: string } };
-      if (!r.ok) throw new Error('Не удалось создать');
-      setResult(`Создан: ${r.profile!.full_name}, код: ${r.profile!.access_code}`);
-      setName('');
-    } catch (e) {
-      setResult(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function publishAnnouncement() {
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('announcements').insert({
-        title: annTitle,
-        body: annBody,
-        priority: 'normal',
-        created_by: profile!.id,
-      });
-      if (error) throw error;
-      setAnnTitle('');
-      setAnnBody('');
-      setResult('Объявление опубликовано');
-      await pullAllData();
-    } catch (e) {
-      setResult(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function toggleRain(enabled: boolean) {
-    setLoading(true);
-    try {
-      const { error } = await supabase.rpc('set_rain_mode', {
-        p_access_code: getAccessCode(),
-        p_enabled: enabled,
-      });
-      if (error) throw error;
-      setResult(enabled ? 'Дождевой режим включён' : 'Дождевой режим выключен');
-      await pullAllData();
-    } catch (e) {
-      setResult(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'participants', label: 'Участники' },
-    { id: 'announcements', label: 'Объявления' },
-    { id: 'settings', label: 'Настройки' },
-  ];
 
   return (
-    <AppShell title="Админка">
+    <AdminShell toast={toast}>
       <div className="space-y-4">
-        <div className="flex gap-2 overflow-x-auto">
-          {tabs.map((t) => (
-            <Button
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {TABS.map((t) => (
+            <button
               key={t.id}
-              size="sm"
-              variant={tab === t.id ? 'primary' : 'secondary'}
+              type="button"
               onClick={() => setTab(t.id)}
+              className={cn(
+                'flex flex-col items-center justify-center rounded-xl border px-2 py-3 text-xs font-medium min-h-[72px]',
+                tab === t.id
+                  ? 'border-primary-600 bg-primary-700 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 active:bg-slate-50',
+              )}
             >
+              <span className="text-xl mb-1">{t.icon}</span>
               {t.label}
-            </Button>
+            </button>
           ))}
         </div>
 
-        {tab === 'participants' && (
-          <Card className="space-y-3">
-            <h3 className="font-semibold">Создать участника</h3>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя Фамилия" />
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3"
-            >
-              {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
-                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-              ))}
-            </select>
-            <Button fullWidth onClick={createParticipant} disabled={loading || !name.trim()}>
-              Создать и сгенерировать код
-            </Button>
-          </Card>
-        )}
-
-        {tab === 'announcements' && (
-          <Card className="space-y-3">
-            <h3 className="font-semibold">Новое объявление</h3>
-            <Input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="Заголовок" />
-            <textarea
-              value={annBody}
-              onChange={(e) => setAnnBody(e.target.value)}
-              placeholder="Текст"
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 min-h-[100px]"
-            />
-            <Button fullWidth onClick={publishAnnouncement} disabled={loading || !annTitle || !annBody}>
-              Опубликовать
-            </Button>
-          </Card>
-        )}
-
-        {tab === 'settings' && (
-          <Card className="space-y-3">
-            <h3 className="font-semibold">Дождевой режим</h3>
-            <p className="text-sm text-slate-600">Переключает отображение резервных мест для всех участников.</p>
-            <div className="flex gap-2">
-              <Button onClick={() => toggleRain(true)} disabled={loading}>Включить</Button>
-              <Button variant="secondary" onClick={() => toggleRain(false)} disabled={loading}>Выключить</Button>
-            </div>
-          </Card>
-        )}
-
-        {result && <p className="text-sm text-primary-700">{result}</p>}
+        {tab === 'participants' && <ParticipantsSection {...sectionProps} />}
+        {tab === 'venues' && <VenuesSection {...sectionProps} />}
+        {tab === 'days' && <DaysSection {...sectionProps} />}
+        {tab === 'schedule' && <ScheduleSection {...sectionProps} />}
+        {tab === 'groups' && <GroupsSection {...sectionProps} />}
+        {tab === 'announcements' && <AnnouncementsSection {...sectionProps} />}
+        {tab === 'settings' && <SettingsSection {...sectionProps} />}
       </div>
-    </AppShell>
+    </AdminShell>
   );
 }

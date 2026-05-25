@@ -136,6 +136,18 @@ export const CONNECTION_TYPE_LABELS: Record<ConnectionType, string> = {
   process_group: 'Процесс-группа',
 };
 
+export const GROUP_TYPE_LABELS: Record<GroupType, string> = {
+  therapy: 'Терапевтическая группа',
+  supervision: 'Супервизионная группа',
+  process: 'Процесс-группа',
+};
+
+export const PRIORITY_LABELS: Record<AnnouncementPriority, string> = {
+  normal: 'Обычное',
+  important: 'Важное',
+  urgent: 'Срочное',
+};
+
 export function isStaffRole(role: UserRole): boolean {
   return role === 'organizer' || role === 'admin';
 }
