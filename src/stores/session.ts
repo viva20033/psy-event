@@ -40,7 +40,6 @@ export const useSession = create<SessionState>()(
       partialize: (s) => ({ profile: s.profile }),
       onRehydrateStorage: () => (state) => {
         if (state?.profile) setAccessCode(state.profile.access_code);
-        state?.hydrate();
       },
     },
   ),
