@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FormField, adminTextareaClass } from '@/components/admin/FormField';
+import { VenuePhotoField } from '@/components/admin/VenuePhotoField';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
 import { useAdminFeedback } from '@/hooks/useAdminFeedback';
@@ -102,8 +103,8 @@ export function VenuesSection() {
     <div className="space-y-4">
       <AdminStatusBanner feedback={feedback} />
       <Card className="bg-primary-50 border-primary-100 text-sm text-primary-900">
-        <strong>Места на территории.</strong> Участники видят название, ориентир и «как пройти».
-        Фото — вставьте ссылку (загрузите файл в Supabase Storage → скопируйте публичную ссылку).
+        <strong>Места на территории.</strong> Участники видят название, ориентир, «как пройти» и фото.
+        Фото можно загрузить с телефона или компьютера.
       </Card>
 
       <Button fullWidth onClick={startCreate}>+ Добавить место</Button>
@@ -143,13 +144,12 @@ export function VenuesSection() {
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             />
           </FormField>
-          <FormField label="Ссылка на фото (необязательно)">
-            <Input
-              value={form.photo_url ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, photo_url: e.target.value }))}
-              placeholder="https://..."
-            />
-          </FormField>
+          <VenuePhotoField
+            photoUrl={form.photo_url ?? ''}
+            venueSlug={form.slug?.trim() || slugify(form.name ?? '')}
+            disabled={saving}
+            onChange={(url) => setForm((f) => ({ ...f, photo_url: url }))}
+          />
           <FormField label="Порядок в списке" hint="Меньше число — выше в списке">
             <Input
               type="number"

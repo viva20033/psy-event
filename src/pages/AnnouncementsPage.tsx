@@ -3,6 +3,7 @@ import { ru } from 'date-fns/locale';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
 import { PriorityBadge } from '@/components/ui/Badge';
+import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { useOfflineData } from '@/hooks/useOfflineData';
 
 export function AnnouncementsPage() {
@@ -11,6 +12,8 @@ export function AnnouncementsPage() {
   return (
     <AppShell title="Объявления">
       <div className="space-y-3">
+        <PushNotificationPrompt />
+
         {announcements.length === 0 ? (
           <p className="text-center text-slate-500 py-8">Объявлений пока нет</p>
         ) : (
@@ -20,7 +23,14 @@ export function AnnouncementsPage() {
                 <h3 className="font-semibold text-primary-900">{a.title}</h3>
                 <PriorityBadge priority={a.priority} />
               </div>
-              <p className="mt-2 text-sm text-slate-700">{a.body}</p>
+              {a.image_url && (
+                <img
+                  src={a.image_url}
+                  alt=""
+                  className="mt-3 w-full max-h-64 object-cover rounded-xl border border-slate-100"
+                />
+              )}
+              <p className="mt-2 text-sm text-slate-700 whitespace-pre-wrap">{a.body}</p>
               <p className="mt-2 text-xs text-slate-500">
                 {format(parseISO(a.published_at), 'd MMMM HH:mm', { locale: ru })}
               </p>

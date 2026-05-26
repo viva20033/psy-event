@@ -3,11 +3,14 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { PriorityBadge } from '@/components/ui/Badge';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { FormField, adminSelectClass, adminTextareaClass } from '@/components/admin/FormField';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { AdminStatusBanner } from '@/components/admin/AdminStatusBanner';
 import { useAdminFeedback } from '@/hooks/useAdminFeedback';
+import { uploadAnnouncementImage } from '@/lib/supabase/announcementImage';
 import { supabase } from '@/lib/supabase/client';
+import { notifyAnnouncementPublished } from '@/services/push';
 import { PRIORITY_LABELS, type Announcement, type AnnouncementPriority } from '@/types';
 
 export function AnnouncementsSection() {
@@ -15,6 +18,7 @@ export function AnnouncementsSection() {
   const [list, setList] = useState<Announcement[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [priority, setPriority] = useState<AnnouncementPriority>('normal');
   const [editing, setEditing] = useState<Announcement | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -32,46 +36,69 @@ export function AnnouncementsSection() {
     load().catch(() => undefined);
   }, [load]);
 
+  function resetForm() {
+    setTitle('');
+    setBody('');
+    setImageUrl('');
+    setPriority('normal');
+    setEditing(null);
+  }
+
   async function saveNew() {
     if (!title.trim() || !body.trim()) return;
-    await run('Объявление опубликовано', async () => {
-      const { error } = await supabase.from('announcements').insert({
-        title: title.trim(),
-        body: body.trim(),
-        priority,
-        is_published: true,
-      });
+    await run('Опубликовано. Push уйдёт подписчикам (если настроен).', async () => {
+      const { data, error } = await supabase
+        .from('announcements')
+        .insert({
+          title: title.trim(),
+          body: body.trim(),
+          image_url: imageUrl.trim() || null,
+          priority,
+          is_published: true,
+        })
+        .select('id')
+        .single();
       if (error) throw error;
-      setTitle('');
-      setBody('');
-      setPriority('normal');
+      resetForm();
       await load();
+      if (data?.id) void notifyAnnouncementPublished(data.id);
     });
   }
 
   async function saveEdit() {
     if (!editing) return;
+    const wasPublished = editing.is_published;
     await run('Объявление сохранено', async () => {
       const { error } = await supabase
         .from('announcements')
-        .update({ title: title.trim(), body: body.trim(), priority })
+        .update({
+          title: title.trim(),
+          body: body.trim(),
+          image_url: imageUrl.trim() || null,
+          priority,
+        })
         .eq('id', editing.id);
       if (error) throw error;
-      setEditing(null);
-      setTitle('');
-      setBody('');
+      resetForm();
       await load();
+      if (wasPublished) {
+        void notifyAnnouncementPublished(editing.id);
+      }
     });
   }
 
   async function togglePublish(a: Announcement) {
-    await run(a.is_published ? 'Снято с публикации' : 'Снова опубликовано', async () => {
+    const willPublish = !a.is_published;
+    await run(willPublish ? 'Снова опубликовано' : 'Снято с публикации', async () => {
       const { error } = await supabase
         .from('announcements')
-        .update({ is_published: !a.is_published })
+        .update({ is_published: willPublish })
         .eq('id', a.id);
       if (error) throw error;
       await load();
+      if (willPublish) {
+        void notifyAnnouncementPublished(a.id);
+      }
     });
   }
 
@@ -89,7 +116,8 @@ export function AnnouncementsSection() {
       <AdminStatusBanner feedback={feedback} />
 
       <Card className="bg-amber-50 border-amber-200 text-sm text-amber-900">
-        После «Опубликовать» появится <strong>зелёное сообщение</strong> вверху. Срочные — на главном экране у всех.
+        После публикации участники с включёнными уведомлениями получат <strong>push</strong>.
+        Срочные объявления также видны на главном экране.
       </Card>
 
       <Card className="space-y-3">
@@ -100,6 +128,15 @@ export function AnnouncementsSection() {
         <FormField label="Текст">
           <textarea className={adminTextareaClass} value={body} onChange={(e) => setBody(e.target.value)} />
         </FormField>
+        <ImageUploadField
+          label="Картинка (необязательно)"
+          hint="Фото с телефона или компьютера. Покажется в объявлении и в push."
+          imageUrl={imageUrl}
+          onChange={setImageUrl}
+          disabled={saving}
+          alt="Картинка объявления"
+          uploadFile={uploadAnnouncementImage}
+        />
         <FormField label="Важность">
           <select
             className={adminSelectClass}
@@ -116,15 +153,7 @@ export function AnnouncementsSection() {
             <Button fullWidth onClick={saveEdit} disabled={saving}>
               {saving ? 'Сохранение…' : 'Сохранить изменения'}
             </Button>
-            <Button
-              fullWidth
-              variant="secondary"
-              onClick={() => {
-                setEditing(null);
-                setTitle('');
-                setBody('');
-              }}
-            >
+            <Button fullWidth variant="secondary" onClick={resetForm}>
               Отмена
             </Button>
           </>
@@ -143,6 +172,9 @@ export function AnnouncementsSection() {
               <p className="font-medium">{a.title}</p>
               <PriorityBadge priority={a.priority} />
             </div>
+            {a.image_url && (
+              <img src={a.image_url} alt="" className="w-full max-h-32 object-cover rounded-lg" />
+            )}
             <p className="text-sm text-slate-600 line-clamp-2">{a.body}</p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -152,6 +184,7 @@ export function AnnouncementsSection() {
                   setEditing(a);
                   setTitle(a.title);
                   setBody(a.body);
+                  setImageUrl(a.image_url ?? '');
                   setPriority(a.priority);
                 }}
               >

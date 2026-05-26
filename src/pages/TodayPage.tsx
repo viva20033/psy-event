@@ -76,6 +76,13 @@ export function TodayPage() {
           <Card key={a.id} className="border-red-200 bg-red-50">
             <PriorityBadge priority="urgent" />
             <h3 className="mt-1 font-semibold">{a.title}</h3>
+            {a.image_url && (
+              <img
+                src={a.image_url}
+                alt=""
+                className="mt-2 w-full max-h-40 object-cover rounded-lg"
+              />
+            )}
             <p className="text-sm">{a.body}</p>
           </Card>
         ))}

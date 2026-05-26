@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -b --noEmit",
-    "icons": "powershell -ExecutionPolicy Bypass -File scripts/generate-icons.ps1"
+    "icons": "powershell -ExecutionPolicy Bypass -File scripts/generate-icons.ps1",
+    "schedule:sql": "node scripts/generate-schedule-sql.mjs",
+    "vapid": "powershell -ExecutionPolicy Bypass -File scripts/generate-vapid.ps1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

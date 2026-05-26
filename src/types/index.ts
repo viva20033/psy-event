@@ -102,6 +102,7 @@ export interface Announcement {
   id: string;
   title: string;
   body: string;
+  image_url: string | null;
   priority: AnnouncementPriority;
   published_at: string;
   expires_at: string | null;

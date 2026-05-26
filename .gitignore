@@ -20,3 +20,6 @@ Thumbs.db
 
 # PWA dev
 dev-dist/
+
+# Temp PDF renders (OCR)
+scripts/pdf-preview/
