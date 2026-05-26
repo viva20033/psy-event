@@ -1,7 +1,10 @@
 -- Announcement images + Web Push subscriptions
+-- Если ошибка schema cache про image_url — выполните этот файл целиком в SQL Editor.
 
 ALTER TABLE announcements
   ADD COLUMN IF NOT EXISTS image_url text;
+
+-- Быстрая проверка: SELECT image_url FROM announcements LIMIT 1;
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -16,6 +19,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_profile ON push_subscriptions(profile_id);
 
+DROP TRIGGER IF EXISTS push_subscriptions_updated_at ON push_subscriptions;
 CREATE TRIGGER push_subscriptions_updated_at
   BEFORE UPDATE ON push_subscriptions
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();

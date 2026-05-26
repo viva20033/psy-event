@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useOfflineData } from '@/hooks/useOfflineData';
 import { useSession } from '@/stores/session';
+import {
+  filterAvailableGroups,
+  filterAvailableProfiles,
+  hasActiveConnection,
+  outgoingConnections,
+} from '@/lib/connections/helpers';
 import { requestConnection, respondConnection } from '@/services/connections';
 import { pullConnections } from '@/lib/offline/sync';
 import { supabase } from '@/lib/supabase/client';
@@ -15,6 +21,10 @@ const CONNECTION_MAP: Record<string, ConnectionType> = {
   supervisor: 'therapist_supervisor',
 };
 
+function connectionKey(c: Connection): string {
+  return `${c.connection_type}:${c.requester_id}:${c.target_profile_id ?? ''}:${c.target_group_id ?? ''}`;
+}
+
 export function ConnectionsPage() {
   const profile = useSession((s) => s.profile);
   const { connections } = useOfflineData();
@@ -23,6 +33,8 @@ export function ConnectionsPage() {
   const [leaderGroupIds, setLeaderGroupIds] = useState<Set<string>>(new Set());
   const [nameById, setNameById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const submittingRef = useRef(false);
   const [mode, setMode] = useState<'therapist' | 'supervisor' | 'process_group' | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Profile | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
@@ -63,13 +75,44 @@ export function ConnectionsPage() {
 
   const confirmed = useMemo(() => {
     if (!profile) return [];
-    return connections.filter((c) => c.status === 'confirmed');
+    const mine = connections.filter((c) => c.status === 'confirmed');
+    const seen = new Set<string>();
+    return mine.filter((c) => {
+      const key = connectionKey(c);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [connections, profile]);
+
+  const outgoing = useMemo(() => {
+    if (!profile) return [];
+    return outgoingConnections(connections, profile.id);
+  }, [connections, profile]);
+
+  const connectionTypeForMode = useMemo((): ConnectionType | null => {
+    if (mode === 'therapist') return 'client_therapist';
+    if (mode === 'supervisor') return 'therapist_supervisor';
+    if (mode === 'process_group') return 'process_group';
+    return null;
+  }, [mode]);
+
+  const availablePeople = useMemo(() => {
+    if (!profile || !connectionTypeForMode || connectionTypeForMode === 'process_group') {
+      return people;
+    }
+    return filterAvailableProfiles(people, connections, profile.id, connectionTypeForMode);
+  }, [people, connections, profile, connectionTypeForMode]);
+
+  const availableGroups = useMemo(() => {
+    if (!profile) return processGroups;
+    return filterAvailableGroups(processGroups, connections, profile.id) as Group[];
+  }, [processGroups, connections, profile]);
 
   function labelForConnection(c: Connection): string {
     const type = CONNECTION_TYPE_LABELS[c.connection_type];
     if (c.connection_type === 'process_group' && c.target_group_id) {
-      return `${type}: группа (подтверждено)`;
+      return `${type}: группа`;
     }
     const otherId =
       c.requester_id === profile?.id ? c.target_profile_id : c.requester_id;
@@ -85,10 +128,20 @@ export function ConnectionsPage() {
     return `${name} хочет выбрать вас`;
   }
 
+  function labelOutgoing(c: Connection): string {
+    const type = CONNECTION_TYPE_LABELS[c.connection_type];
+    if (c.target_group_id) {
+      return `${type} — ожидает подтверждения ведущим`;
+    }
+    const name = c.target_profile_id ? nameById[c.target_profile_id] : '—';
+    return `${type}: ${name} — ждём подтверждения`;
+  }
+
   async function loadTherapistsOrSupervisors(role: UserRole) {
     setMode(role === 'therapist' ? 'therapist' : 'supervisor');
     setSelectedPerson(null);
     setSelectedGroup(null);
+    setMessage('');
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -110,6 +163,7 @@ export function ConnectionsPage() {
     setMode('process_group');
     setSelectedPerson(null);
     setSelectedGroup(null);
+    setMessage('');
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -130,14 +184,25 @@ export function ConnectionsPage() {
   }
 
   async function confirmPersonChoice() {
-    if (!selectedPerson || !mode || mode === 'process_group') return;
+    if (!selectedPerson || !mode || mode === 'process_group' || !profile || submittingRef.current) {
+      return;
+    }
     const type = CONNECTION_MAP[mode === 'therapist' ? 'therapist' : 'supervisor'];
+
+    if (hasActiveConnection(connections, profile.id, type, selectedPerson.id)) {
+      setMessage('Запрос этому человеку уже отправлен или связь уже подтверждена.');
+      return;
+    }
+
+    submittingRef.current = true;
     setLoading(true);
     setMessage('');
     try {
-      await requestConnection(type, selectedPerson.id);
+      const { alreadyPending } = await requestConnection(type, selectedPerson.id);
       setMessage(
-        `Запрос отправлен: ${selectedPerson.full_name}. Попросите его/её открыть «Мои связи» и нажать «Подтвердить».`,
+        alreadyPending
+          ? `Запрос к ${selectedPerson.full_name} уже был отправлен — ждите подтверждения.`
+          : `Запрос отправлен: ${selectedPerson.full_name}. Попросите открыть «Мои связи» и нажать «Подтвердить».`,
       );
       setSelectedPerson(null);
       setMode(null);
@@ -146,16 +211,27 @@ export function ConnectionsPage() {
       setMessage(e instanceof Error ? e.message : 'Ошибка');
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   }
 
   async function confirmProcessGroup() {
-    if (!selectedGroup) return;
+    if (!selectedGroup || !profile || submittingRef.current) return;
+
+    if (hasActiveConnection(connections, profile.id, 'process_group', undefined, selectedGroup.id)) {
+      setMessage('Запрос в эту группу уже отправлен или группа уже подтверждена.');
+      return;
+    }
+
+    submittingRef.current = true;
     setLoading(true);
+    setMessage('');
     try {
-      await requestConnection('process_group', undefined, selectedGroup.id);
+      const { alreadyPending } = await requestConnection('process_group', undefined, selectedGroup.id);
       setMessage(
-        `Запрос в группу «${selectedGroup.name}». Ведущий группы подтвердит в «Мои связи».`,
+        alreadyPending
+          ? `Запрос в «${selectedGroup.name}» уже был отправлен.`
+          : `Запрос в группу «${selectedGroup.name}». Ведущий подтвердит в «Мои связи».`,
       );
       setSelectedGroup(null);
       setMode(null);
@@ -164,19 +240,28 @@ export function ConnectionsPage() {
       setMessage(e instanceof Error ? e.message : 'Ошибка');
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   }
 
   async function handleRespond(id: string, accept: boolean) {
-    setLoading(true);
+    if (respondingId) return;
+    setRespondingId(id);
+    setMessage('');
     try {
-      await respondConnection(id, accept);
+      const { alreadyResponded } = await respondConnection(id, accept);
       await pullConnections();
-      setMessage(accept ? 'Связь подтверждена' : 'Запрос отклонён');
+      setMessage(
+        alreadyResponded
+          ? 'На этот запрос уже ответили ранее'
+          : accept
+            ? 'Связь подтверждена'
+            : 'Запрос отклонён',
+      );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Ошибка');
     } finally {
-      setLoading(false);
+      setRespondingId(null);
     }
   }
 
@@ -191,7 +276,8 @@ export function ConnectionsPage() {
         <Card className="bg-primary-50 border-primary-100 text-sm text-primary-900 space-y-2">
           <p>
             <strong>Связи не назначает организатор.</strong> Их фиксируют сами участники после
-            живого выбора на площадке — в два шага.
+            живого выбора на площадке — в два шага. Повторно одного и того же человека выбрать
+            нельзя.
           </p>
           <ol className="list-decimal list-inside space-y-1 text-primary-800">
             <li>Клиент выбирает терапевта → терапевт подтверждает</li>
@@ -237,31 +323,48 @@ export function ConnectionsPage() {
           </Card>
         )}
 
+        {outgoing.length > 0 && (
+          <Card className="space-y-2 border-slate-200 bg-slate-50">
+            <h3 className="font-semibold text-slate-800">Ваши запросы (ожидают ответа)</h3>
+            {outgoing.map((c) => (
+              <p key={c.id} className="text-sm text-slate-700">
+                {labelOutgoing(c)}
+              </p>
+            ))}
+          </Card>
+        )}
+
         {mode === 'therapist' || mode === 'supervisor' ? (
           <Card className="space-y-2">
-            <p className="text-sm font-medium">
-              Кого выбрали?
-            </p>
-            <ul className="space-y-2 max-h-52 overflow-y-auto">
-              {people.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPerson(p)}
-                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
-                      selectedPerson?.id === p.id
-                        ? 'border-primary-500 bg-primary-50'
-                        : 'border-slate-200'
-                    }`}
-                  >
-                    {p.full_name}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <p className="text-sm font-medium">Кого выбрали?</p>
+            {availablePeople.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                {people.length === 0
+                  ? 'Список пуст или нет сети'
+                  : 'Все из списка уже выбраны или ждут подтверждения'}
+              </p>
+            ) : (
+              <ul className="space-y-2 max-h-52 overflow-y-auto">
+                {availablePeople.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPerson(p)}
+                      className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                        selectedPerson?.id === p.id
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-slate-200'
+                      }`}
+                    >
+                      {p.full_name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             {selectedPerson && (
               <Button fullWidth onClick={confirmPersonChoice} disabled={loading}>
-                Подтвердить: {selectedPerson.full_name}
+                {loading ? 'Отправка…' : `Отправить запрос: ${selectedPerson.full_name}`}
               </Button>
             )}
           </Card>
@@ -270,26 +373,34 @@ export function ConnectionsPage() {
         {mode === 'process_group' ? (
           <Card className="space-y-2">
             <p className="text-sm font-medium">Какую процесс-группу?</p>
-            <ul className="space-y-2 max-h-52 overflow-y-auto">
-              {processGroups.map((g) => (
-                <li key={g.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedGroup(g)}
-                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
-                      selectedGroup?.id === g.id
-                        ? 'border-primary-500 bg-primary-50'
-                        : 'border-slate-200'
-                    }`}
-                  >
-                    {g.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {availableGroups.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                {processGroups.length === 0
+                  ? 'Групп нет'
+                  : 'Все группы уже выбраны или ждут подтверждения'}
+              </p>
+            ) : (
+              <ul className="space-y-2 max-h-52 overflow-y-auto">
+                {availableGroups.map((g) => (
+                  <li key={g.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedGroup(g)}
+                      className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                        selectedGroup?.id === g.id
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-slate-200'
+                      }`}
+                    >
+                      {g.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             {selectedGroup && (
               <Button fullWidth onClick={confirmProcessGroup} disabled={loading}>
-                Подтвердить: {selectedGroup.name}
+                {loading ? 'Отправка…' : `Отправить запрос: ${selectedGroup.name}`}
               </Button>
             )}
           </Card>
@@ -302,10 +413,19 @@ export function ConnectionsPage() {
               <div key={c.id} className="rounded-lg border border-amber-200 bg-white p-3">
                 <p className="text-sm">{labelIncoming(c)}</p>
                 <div className="mt-2 flex gap-2">
-                  <Button size="sm" onClick={() => handleRespond(c.id, true)} disabled={loading}>
-                    Подтвердить
+                  <Button
+                    size="sm"
+                    onClick={() => handleRespond(c.id, true)}
+                    disabled={respondingId !== null}
+                  >
+                    {respondingId === c.id ? '…' : 'Подтвердить'}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleRespond(c.id, false)} disabled={loading}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleRespond(c.id, false)}
+                    disabled={respondingId !== null}
+                  >
                     Отклонить
                   </Button>
                 </div>

@@ -9,6 +9,13 @@ export function formatSaveError(e: unknown): string {
     if (msg.includes('JWT') || msg.includes('permission') || msg.includes('policy')) {
       return `${msg} — проверьте, что вы вошли как организатор/админ и обновите страницу.`;
     }
+    if (msg.includes('image_url') && msg.includes('announcements')) {
+      return (
+        'В базе нет колонки для картинок объявлений. В Supabase → SQL Editor выполните файл ' +
+        'supabase/migrations/004_announcements_push.sql (или: ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url text;), ' +
+        'подождите 10–20 секунд и попробуйте снова.'
+      );
+    }
     return msg;
   }
   return e instanceof Error ? e.message : 'Не удалось сохранить';
