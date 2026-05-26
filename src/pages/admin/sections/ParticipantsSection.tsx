@@ -9,7 +9,7 @@ import { useAdminFeedback } from '@/hooks/useAdminFeedback';
 import { useAdminData } from '@/stores/adminData';
 import { supabase } from '@/lib/supabase/client';
 import { getAccessCode } from '@/lib/supabase/client';
-import { copyText } from '@/services/admin';
+import { copyText, loginUrl } from '@/services/admin';
 import { ROLE_LABELS, type Profile, type UserRole } from '@/types';
 
 export function ParticipantsSection() {
@@ -202,8 +202,33 @@ export function ParticipantsSection() {
                   <p className="font-mono text-sm font-bold text-primary-700">{p.access_code}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => copyText(p.access_code).then((ok) => setFeedback({ type: ok ? 'ok' : 'err', text: ok ? 'Код скопирован' : 'Ошибка' }))}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      copyText(p.access_code).then((ok) =>
+                        setFeedback({
+                          type: ok ? 'ok' : 'err',
+                          text: ok ? 'Код скопирован' : 'Ошибка',
+                        }),
+                      )
+                    }
+                  >
                     Код
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      copyText(loginUrl(p.access_code)).then((ok) =>
+                        setFeedback({
+                          type: ok ? 'ok' : 'err',
+                          text: ok ? 'Ссылка для входа скопирована' : 'Ошибка',
+                        }),
+                      )
+                    }
+                  >
+                    Ссылка
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => { setEditing(p); setEditName(p.full_name); setEditRole(p.role); }}>
                     Изменить
