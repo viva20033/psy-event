@@ -78,7 +78,6 @@ export function ImageUploadField({
           id={inputId}
           type="file"
           accept="image/jpeg,image/png,image/webp,image/gif,image/*"
-          capture="environment"
           className="sr-only"
           disabled={disabled || uploading}
           onChange={onFileChange}
@@ -91,7 +90,7 @@ export function ImageUploadField({
             disabled={disabled || uploading}
             onClick={() => inputRef.current?.click()}
           >
-            {uploading ? 'Загрузка…' : imageUrl ? 'Заменить' : 'Выбрать или снять фото'}
+            {uploading ? 'Загрузка…' : imageUrl ? 'Заменить' : 'Выбрать фото'}
           </Button>
           <Button
             type="button"
