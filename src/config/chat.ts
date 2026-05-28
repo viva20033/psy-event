@@ -1,6 +1,14 @@
 /** Реакции в болталке — одна на человека, повторное нажатие снимает */
 export const CHAT_REACTIONS = ['❤️', '👍', '😂', '😮', '🙏', '🔥'] as const;
 
+/** Смайлики для вставки в текст сообщения */
+export const CHAT_EMOJIS = [
+  '😀', '😊', '😂', '🤣', '🥰', '😍', '😘', '🤗',
+  '😢', '🥲', '😅', '🙏', '👍', '👏', '🫶', '💪',
+  '❤️', '💛', '✨', '🔥', '⭐', '🎉', '🌊', '☀️',
+  '🌸', '🌿', '🍉', '☕', '🫂', '💫', '🤝', '🕊️',
+] as const;
+
 export type ChatReactionEmoji = (typeof CHAT_REACTIONS)[number];
 
 export const CHAT_RULES_KEY = 'psy-event-chat-rules-v1';

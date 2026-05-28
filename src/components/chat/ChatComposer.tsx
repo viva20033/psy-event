@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ChatEmojiPicker } from '@/components/chat/ChatEmojiPicker';
 import { uploadChatImage } from '@/lib/supabase/chatImage';
 
 interface ChatComposerProps {
@@ -14,8 +15,27 @@ export function ChatComposer({ profileId, disabled, onSend }: ChatComposerProps)
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const fileId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function insertEmoji(emoji: string) {
+    const el = textareaRef.current;
+    if (!el) {
+      setText((t) => t + emoji);
+      return;
+    }
+    const start = el.selectionStart ?? text.length;
+    const end = el.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + emoji + text.slice(end);
+    setText(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + emoji.length;
+      el.setSelectionRange(pos, pos);
+    });
+  }
 
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -36,6 +56,7 @@ export function ChatComposer({ profileId, disabled, onSend }: ChatComposerProps)
   async function submit() {
     if (sending || disabled) return;
     setSending(true);
+    setEmojiOpen(false);
     setError(null);
     try {
       await onSend(text, imageUrl);
@@ -50,6 +71,14 @@ export function ChatComposer({ profileId, disabled, onSend }: ChatComposerProps)
 
   return (
     <div className="border-t border-slate-200 bg-white px-3 py-2 space-y-2 safe-bottom">
+      {emojiOpen && (
+        <ChatEmojiPicker
+          onPick={(emoji) => {
+            insertEmoji(emoji);
+            textareaRef.current?.focus();
+          }}
+        />
+      )}
       {imageUrl && (
         <div className="relative inline-block">
           <img src={imageUrl} alt="" className="h-20 rounded-lg object-cover" />
@@ -76,6 +105,18 @@ export function ChatComposer({ profileId, disabled, onSend }: ChatComposerProps)
         />
         <button
           type="button"
+          onClick={() => setEmojiOpen((v) => !v)}
+          disabled={disabled || sending}
+          className={`shrink-0 text-xl p-2 rounded-xl border min-h-[44px] min-w-[44px] ${
+            emojiOpen ? 'border-primary-400 bg-primary-50' : 'border-slate-200'
+          }`}
+          aria-label="Смайлики"
+          aria-expanded={emojiOpen}
+        >
+          😊
+        </button>
+        <button
+          type="button"
           onClick={() => fileRef.current?.click()}
           disabled={disabled || uploading || sending}
           className="shrink-0 text-xl p-2 rounded-xl border border-slate-200 min-h-[44px] min-w-[44px]"
@@ -84,6 +125,7 @@ export function ChatComposer({ profileId, disabled, onSend }: ChatComposerProps)
           {uploading ? '…' : '📷'}
         </button>
         <textarea
+          ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Сообщение…"
