@@ -98,6 +98,23 @@ export interface Connection {
   target_group?: Group;
 }
 
+export interface ChatMessage {
+  id: string;
+  author_id: string;
+  body: string;
+  image_url: string | null;
+  created_at: string;
+  deleted_at?: string | null;
+}
+
+export interface ChatReaction {
+  id: string;
+  message_id: string;
+  profile_id: string;
+  emoji: string;
+  created_at: string;
+}
+
 export interface Announcement {
   id: string;
   title: string;

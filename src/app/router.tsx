@@ -9,6 +9,8 @@ import { TerritoryPage } from '@/pages/TerritoryPage';
 import { AnnouncementsPage } from '@/pages/AnnouncementsPage';
 import { LostPage } from '@/pages/LostPage';
 import { AdminPage } from '@/pages/admin/AdminPage';
+import { ChatPage } from '@/pages/ChatPage';
+import { isFeatureEnabled } from '@/config/feature-flags';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const profile = useSession((s) => s.profile);
@@ -45,6 +47,9 @@ export function AppRouter() {
         }
       />
       <Route path="/" element={<RequireAuth><TodayPage /></RequireAuth>} />
+      {isFeatureEnabled('chat') && (
+        <Route path="/chat" element={<RequireAuth><ChatPage /></RequireAuth>} />
+      )}
       <Route path="/schedule" element={<RequireAuth><SchedulePage /></RequireAuth>} />
       <Route path="/connections" element={<RequireAuth><ConnectionsPage /></RequireAuth>} />
       <Route path="/territory" element={<RequireAuth><TerritoryPage /></RequireAuth>} />

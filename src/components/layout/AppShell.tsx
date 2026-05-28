@@ -2,15 +2,19 @@
 import { cn } from '@/lib/utils/cn';
 import { Link } from 'react-router-dom';
 import { useSession } from '@/stores/session';
+import { isFeatureEnabled, type FeatureFlag } from '@/config/feature-flags';
 import { isStaffRole } from '@/types';
 
-const tabs = [
+type NavTab = { to: string; label: string; icon: string; feature?: FeatureFlag };
+
+const baseTabs: NavTab[] = [
   { to: '/', label: 'Сегодня', icon: '📍' },
+  { to: '/chat', label: 'Болталка', icon: '💬', feature: 'chat' },
   { to: '/schedule', label: 'Расписание', icon: '📅' },
   { to: '/connections', label: 'Связи', icon: '🔗' },
-  { to: '/territory', label: 'Территория', icon: '🗺️' },
-  { to: '/announcements', label: 'Объявления', icon: '📢' },
-] as const;
+  { to: '/territory', label: 'Места', icon: '🗺️' },
+  { to: '/announcements', label: 'Новости', icon: '📢' },
+];
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -20,6 +24,7 @@ interface AppShellProps {
 export function AppShell({ children, title }: AppShellProps) {
   const pendingSync = useSession((s) => s.pendingSync);
   const profile = useSession((s) => s.profile);
+  const tabs = baseTabs.filter((t) => !t.feature || isFeatureEnabled(t.feature));
 
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50">
@@ -57,8 +62,8 @@ export function AppShell({ children, title }: AppShellProps) {
                 )
               }
             >
-              <span className="text-lg">{tab.icon}</span>
-              {tab.label}
+              <span className="text-base leading-none">{tab.icon}</span>
+              <span className="text-[10px] leading-tight text-center">{tab.label}</span>
             </NavLink>
           ))}
         </div>

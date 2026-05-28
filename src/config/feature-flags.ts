@@ -3,7 +3,7 @@
  * Enable flags when modules are ready; routes stay unregistered while false.
  */
 export const featureFlags = {
-  chat: false,
+  chat: true,
   gallery: false,
   workshops: false,
   networking: false,
