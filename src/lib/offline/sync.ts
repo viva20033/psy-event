@@ -4,6 +4,7 @@ import type {
   Announcement,
   Connection,
   EventDay,
+  IntensiveTrainer,
   ScheduleEvent,
   Venue,
 } from '@/types';
@@ -11,6 +12,7 @@ import type {
 export async function pullAllData(): Promise<void> {
   await Promise.all([
     pullVenues(),
+    pullIntensiveTrainers(),
     pullEventDays(),
     pullSchedule(),
     pullAnnouncements(),
@@ -31,6 +33,21 @@ export async function pullVenues(): Promise<Venue[]> {
   await db.venues.bulkPut(venues);
   await setLastSyncTime('venues');
   return venues;
+}
+
+export async function pullIntensiveTrainers(): Promise<IntensiveTrainer[]> {
+  const { data, error } = await supabase
+    .from('intensive_trainers')
+    .select('*')
+    .eq('is_visible', true)
+    .order('sort_order')
+    .order('full_name');
+  if (error) throw error;
+  const trainers = (data ?? []) as IntensiveTrainer[];
+  await db.intensiveTrainers.clear();
+  await db.intensiveTrainers.bulkPut(trainers);
+  await setLastSyncTime('intensiveTrainers');
+  return trainers;
 }
 
 export async function pullEventDays(): Promise<EventDay[]> {

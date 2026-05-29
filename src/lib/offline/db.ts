@@ -4,6 +4,7 @@ import type {
   Connection,
   EventDay,
   EventSettings,
+  IntensiveTrainer,
   Profile,
   ScheduleEvent,
   SyncQueueItem,
@@ -18,6 +19,7 @@ export interface CachedMeta {
 class OfflineDatabase extends Dexie {
   profile!: EntityTable<Profile, 'id'>;
   venues!: EntityTable<Venue, 'id'>;
+  intensiveTrainers!: EntityTable<IntensiveTrainer, 'id'>;
   eventDays!: EntityTable<EventDay, 'id'>;
   scheduleEvents!: EntityTable<ScheduleEvent, 'id'>;
   announcements!: EntityTable<Announcement, 'id'>;
@@ -31,6 +33,18 @@ class OfflineDatabase extends Dexie {
     this.version(1).stores({
       profile: 'id',
       venues: 'id, slug, sort_order',
+      eventDays: 'id, day_index',
+      scheduleEvents: 'id, event_day_id, starts_at',
+      announcements: 'id, published_at',
+      connections: 'id, requester_id, target_profile_id, status',
+      settings: 'key',
+      syncQueue: '++id, status, createdAt',
+      meta: 'key',
+    });
+    this.version(2).stores({
+      profile: 'id',
+      venues: 'id, slug, sort_order',
+      intensiveTrainers: 'id, profile_id, sort_order',
       eventDays: 'id, day_index',
       scheduleEvents: 'id, event_day_id, starts_at',
       announcements: 'id, published_at',

@@ -39,6 +39,38 @@ export interface Venue {
   is_active?: boolean;
 }
 
+export interface IntensiveTrainer {
+  id: string;
+  profile_id: string;
+  gestalt_url: string | null;
+  full_name: string;
+  photo_url: string | null;
+  status_line: string | null;
+  bio: string | null;
+  specializations: string | null;
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  sort_order: number;
+  is_visible: boolean;
+  imported_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type GestaltImportPreview = Pick<
+  IntensiveTrainer,
+  | 'full_name'
+  | 'photo_url'
+  | 'status_line'
+  | 'bio'
+  | 'specializations'
+  | 'phone'
+  | 'email'
+  | 'city'
+  | 'gestalt_url'
+>;
+
 export interface EventDay {
   id: string;
   day_index: number;

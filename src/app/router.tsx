@@ -6,7 +6,8 @@ import { TodayPage } from '@/pages/TodayPage';
 import { SchedulePage } from '@/pages/SchedulePage';
 import { ConnectionsPage } from '@/pages/ConnectionsPage';
 import { MyGroupsPage } from '@/pages/MyGroupsPage';
-import { TerritoryPage } from '@/pages/TerritoryPage';
+import { InformationPage } from '@/pages/InformationPage';
+import { ProfilePage } from '@/pages/ProfilePage';
 import { AnnouncementsPage } from '@/pages/AnnouncementsPage';
 import { LostPage } from '@/pages/LostPage';
 import { AdminPage } from '@/pages/admin/AdminPage';
@@ -54,7 +55,9 @@ export function AppRouter() {
       <Route path="/schedule" element={<RequireAuth><SchedulePage /></RequireAuth>} />
       <Route path="/connections" element={<RequireAuth><ConnectionsPage /></RequireAuth>} />
       <Route path="/my-groups" element={<RequireAuth><MyGroupsPage /></RequireAuth>} />
-      <Route path="/territory" element={<RequireAuth><TerritoryPage /></RequireAuth>} />
+      <Route path="/information" element={<RequireAuth><InformationPage /></RequireAuth>} />
+      <Route path="/territory" element={<Navigate to="/information" replace />} />
+      <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
       <Route path="/announcements" element={<RequireAuth><AnnouncementsPage /></RequireAuth>} />
       <Route path="/lost" element={<RequireAuth><LostPage /></RequireAuth>} />
       <Route

@@ -12,10 +12,12 @@ import { ScheduleSection } from './sections/ScheduleSection';
 import { GroupsSection } from './sections/GroupsSection';
 import { AnnouncementsSection } from './sections/AnnouncementsSection';
 import { SettingsSection } from './sections/SettingsSection';
+import { TrainersSection } from './sections/TrainersSection';
 
 type Tab =
   | 'participants'
   | 'venues'
+  | 'trainers'
   | 'days'
   | 'schedule'
   | 'groups'
@@ -25,6 +27,7 @@ type Tab =
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'participants', label: 'Участники', icon: '👤' },
   { id: 'venues', label: 'Места', icon: '📍' },
+  { id: 'trainers', label: 'Тренеры', icon: '🎓' },
   { id: 'days', label: 'Дни', icon: '📆' },
   { id: 'schedule', label: 'Расписание', icon: '🕐' },
   { id: 'groups', label: 'Группы', icon: '👥' },
@@ -56,6 +59,7 @@ export function AdminPage() {
       ({
         participants: <ParticipantsSection />,
         venues: <VenuesSection />,
+        trainers: <TrainersSection />,
         days: <DaysSection />,
         schedule: <ScheduleSection />,
         groups: <GroupsSection />,

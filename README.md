@@ -30,17 +30,20 @@ npm run dev
 6. Болталка (общий чат): `supabase/migrations/006_chat_lounge.sql`
 7. Группы (место, роли тренеров): `supabase/migrations/007_groups_details.sql`  
    В Dashboard → **Database → Replication** включите `chat_messages` и `chat_reactions` для мгновенных обновлений (иначе обновление раз в ~12 с).
-8. Импорт расписания (19 июня — 1 июля 2026): `supabase/migrations/002_schedule_2026.sql`  
+8. Тренеры интенсива (справочник + фото): `supabase/migrations/008_intensive_trainers.sql`  
+   Edge Function импорта с gestalt.ru:  
+   `npx supabase functions deploy import-gestalt-trainer --no-verify-jwt`
+9. Импорт расписания (19 июня — 1 июля 2026): `supabase/migrations/002_schedule_2026.sql`  
    Перед повторным запуском сделайте бэкап — скрипт удаляет все события в `schedule_events`.  
    Чтобы пересобрать SQL после правок: `npm run schedule:sql` (редактируйте `scripts/schedule-2026-data.mjs`).
-9. Создайте первого администратора вручную:
+10. Создайте первого администратора вручную:
 
 ```sql
 INSERT INTO profiles (access_code, full_name, role)
 VALUES ('ADMIN001', 'Организатор', 'admin');
 ```
 
-10. Скопируйте URL и anon key в `.env`
+11. Скопируйте URL и anon key в `.env`
 
 ### Push-уведомления об объявлениях
 
@@ -80,7 +83,9 @@ supabase/migrations/
 | `/schedule` | Расписание |
 | `/connections` | Мои связи |
 | `/my-groups` | Мои группы |
-| `/territory` | Территория |
+| `/information` | Информация (места + тренеры) |
+| `/profile` | Мой профиль / карточка тренера |
+| `/territory` | → редирект на `/information` |
 | `/announcements` | Объявления |
 | `/chat` | Болталка (общий чат) |
 | `/lost` | Я потерялся |
@@ -96,7 +101,7 @@ supabase/migrations/
 
 ## Offline
 
-Кэшируются: shell, расписание, места, объявления, связи, профиль.
+Кэшируются: shell, расписание, места, тренеры, объявления, связи, профиль.
 
 Изменения связей офлайн → очередь `syncQueue` → синхронизация при `online`.
 

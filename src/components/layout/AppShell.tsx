@@ -12,7 +12,7 @@ const baseTabs: NavTab[] = [
   { to: '/chat', label: 'Болталка', icon: '💬', feature: 'chat' },
   { to: '/schedule', label: 'Расписание', icon: '📅' },
   { to: '/connections', label: 'Связи', icon: '🔗' },
-  { to: '/territory', label: 'Места', icon: '🗺️' },
+  { to: '/information', label: 'Информация', icon: '🗺️' },
   { to: '/announcements', label: 'Новости', icon: '📢' },
 ];
 
@@ -38,11 +38,18 @@ export function AppShell({ children, title }: AppShellProps) {
               Ожидает синхронизации
             </span>
           )}
-          {profile && isStaffRole(profile.role) && (
-            <Link to="/admin" className="text-sm text-primary-600 font-medium">
-              Админ
-            </Link>
-          )}
+          <div className="flex items-center gap-3">
+            {profile && (
+              <Link to="/profile" className="text-sm text-slate-600 font-medium">
+                Профиль
+              </Link>
+            )}
+            {profile && isStaffRole(profile.role) && (
+              <Link to="/admin" className="text-sm text-primary-600 font-medium">
+                Админ
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 

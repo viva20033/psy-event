@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useSession } from '@/stores/session';
+import { useOfflineData } from '@/hooks/useOfflineData';
 import {
   fetchMyGroups,
   formatGroupMeetingPlace,
@@ -12,7 +13,10 @@ import {
 import { GROUP_TYPE_LABELS, type MyGroupView } from '@/types';
 
 export function MyGroupsPage() {
+  const navigate = useNavigate();
   const profile = useSession((s) => s.profile);
+  const { intensiveTrainers } = useOfflineData();
+  const trainerByProfileId = new Map(intensiveTrainers.map((t) => [t.profile_id, t]));
   const [groups, setGroups] = useState<MyGroupView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +78,7 @@ export function MyGroupsPage() {
                     <p className="text-slate-500 text-xs mt-1">{group.venue.route_hint}</p>
                   )}
                   {group.venue && (
-                    <Link to="/territory" className="text-primary-600 text-xs font-medium mt-1 inline-block">
+                    <Link to="/information" className="text-primary-600 text-xs font-medium mt-1 inline-block">
                       Карта территории →
                     </Link>
                   )}
@@ -93,9 +97,27 @@ export function MyGroupsPage() {
                   <p className="text-sm text-slate-500">Пока не назначены</p>
                 ) : (
                   <ul className="text-sm text-slate-700 space-y-1">
-                    {trainers.map((t) => (
-                      <li key={t.id}>{formatTrainerLine(t)}</li>
-                    ))}
+                    {trainers.map((t) => {
+                      const card = trainerByProfileId.get(t.profile_id);
+                      const line = formatTrainerLine(t);
+                      return (
+                        <li key={t.id}>
+                          {card ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate(`/information?tab=trainers&trainer=${card.id}`)
+                              }
+                              className="text-primary-700 font-medium underline-offset-2 hover:underline text-left"
+                            >
+                              {line}
+                            </button>
+                          ) : (
+                            line
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>

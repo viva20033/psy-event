@@ -1,11 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, getCachedSettings } from '@/lib/offline/db';
 import { useEffect, useState } from 'react';
-import type { EventSettings } from '@/types';
+import type { EventSettings, IntensiveTrainer } from '@/types';
 
 export function useOfflineData() {
   const profile = useLiveQuery(() => db.profile.toCollection().first());
   const venues = useLiveQuery(() => db.venues.orderBy('sort_order').toArray(), []);
+  const intensiveTrainers = useLiveQuery(
+    () => db.intensiveTrainers.orderBy('sort_order').toArray(),
+    [],
+  );
   const eventDays = useLiveQuery(() => db.eventDays.orderBy('day_index').toArray(), []);
   const scheduleEvents = useLiveQuery(
     () => db.scheduleEvents.orderBy('starts_at').toArray(),
@@ -28,6 +32,7 @@ export function useOfflineData() {
   return {
     profile,
     venues: venues ?? [],
+    intensiveTrainers: (intensiveTrainers ?? []) as IntensiveTrainer[],
     eventDays: eventDays ?? [],
     scheduleEvents: scheduleEvents ?? [],
     announcements: announcements ?? [],
