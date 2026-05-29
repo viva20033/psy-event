@@ -1,0 +1,7 @@
+# Настройки Edge Functions (project_id задаётся через `npx supabase link`)
+
+[functions.import-gestalt-trainer]
+verify_jwt = false
+
+[functions.notify-announcement]
+verify_jwt = false
