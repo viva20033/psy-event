@@ -117,8 +117,14 @@ export function TodayPage() {
           </section>
         )}
 
-        <Link to="/lost">
+        <Link to="/my-groups">
           <Button variant="secondary" fullWidth>
+            Мои группы
+          </Button>
+        </Link>
+
+        <Link to="/lost">
+          <Button variant="ghost" fullWidth>
             Я потерялся
           </Button>
         </Link>

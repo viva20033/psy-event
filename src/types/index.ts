@@ -8,6 +8,8 @@ export type UserRole =
 
 export type GroupType = 'therapy' | 'supervision' | 'process';
 
+export type GroupMemberRole = 'participant' | 'linear_trainer' | 'invited_trainer' | 'leader';
+
 export type ConnectionType =
   | 'client_therapist'
   | 'therapist_supervisor'
@@ -74,6 +76,9 @@ export interface Group {
   name: string;
   group_type: GroupType;
   description: string | null;
+  venue_id?: string | null;
+  meeting_note?: string | null;
+  venue?: Venue | null;
 }
 
 export interface GroupMember {
@@ -81,7 +86,16 @@ export interface GroupMember {
   group_id: string;
   profile_id: string;
   is_leader: boolean;
+  member_role?: GroupMemberRole;
+  three_day_block?: number | null;
   profile?: Profile;
+}
+
+export interface MyGroupView {
+  group: Group;
+  myMembership: GroupMember;
+  trainers: GroupMember[];
+  participants: GroupMember[];
 }
 
 export interface Connection {
@@ -158,6 +172,13 @@ export const GROUP_TYPE_LABELS: Record<GroupType, string> = {
   therapy: 'Терапевтическая группа',
   supervision: 'Супервизионная группа',
   process: 'Процесс-группа',
+};
+
+export const GROUP_MEMBER_ROLE_LABELS: Record<GroupMemberRole, string> = {
+  participant: 'Участник',
+  linear_trainer: 'Линейный тренер',
+  invited_trainer: 'Приглашённый тренер',
+  leader: 'Ведущий группы',
 };
 
 export const PRIORITY_LABELS: Record<AnnouncementPriority, string> = {

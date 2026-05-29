@@ -9,6 +9,11 @@ export function formatSaveError(e: unknown): string {
     if (msg.includes('JWT') || msg.includes('permission') || msg.includes('policy')) {
       return `${msg} — проверьте, что вы вошли как организатор/админ и обновите страницу.`;
     }
+    if (msg.includes('member_role') || msg.includes('venue_id') && msg.includes('groups')) {
+      return (
+        'Нужна миграция групп. В Supabase SQL Editor выполните: supabase/migrations/007_groups_details.sql'
+      );
+    }
     if (msg.includes('image_url') && msg.includes('announcements')) {
       return (
         'В базе нет колонки для картинок объявлений. В Supabase → SQL Editor выполните файл ' +

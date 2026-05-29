@@ -27,19 +27,20 @@ npm run dev
 3. Фото мест: `supabase/migrations/003_venue_photos_storage.sql`
 4. Объявления + push: `supabase/migrations/004_announcements_push.sql`
 5. Защита от дублей связей: `supabase/migrations/005_connections_unique.sql`
-6. Болталка (общий чат): `supabase/migrations/006_chat_lounge.sql`  
+6. Болталка (общий чат): `supabase/migrations/006_chat_lounge.sql`
+7. Группы (место, роли тренеров): `supabase/migrations/007_groups_details.sql`  
    В Dashboard → **Database → Replication** включите `chat_messages` и `chat_reactions` для мгновенных обновлений (иначе обновление раз в ~12 с).
-7. Импорт расписания (19 июня — 1 июля 2026): `supabase/migrations/002_schedule_2026.sql`  
+8. Импорт расписания (19 июня — 1 июля 2026): `supabase/migrations/002_schedule_2026.sql`  
    Перед повторным запуском сделайте бэкап — скрипт удаляет все события в `schedule_events`.  
    Чтобы пересобрать SQL после правок: `npm run schedule:sql` (редактируйте `scripts/schedule-2026-data.mjs`).
-8. Создайте первого администратора вручную:
+9. Создайте первого администратора вручную:
 
 ```sql
 INSERT INTO profiles (access_code, full_name, role)
 VALUES ('ADMIN001', 'Организатор', 'admin');
 ```
 
-9. Скопируйте URL и anon key в `.env`
+10. Скопируйте URL и anon key в `.env`
 
 ### Push-уведомления об объявлениях
 
@@ -78,6 +79,7 @@ supabase/migrations/
 | `/` | Мой день |
 | `/schedule` | Расписание |
 | `/connections` | Мои связи |
+| `/my-groups` | Мои группы |
 | `/territory` | Территория |
 | `/announcements` | Объявления |
 | `/chat` | Болталка (общий чат) |
