@@ -1,5 +1,6 @@
 import { supabase, getAccessCode } from '@/lib/supabase/client';
 import { db, setLastSyncTime } from '@/lib/offline/db';
+import { useSession } from '@/stores/session';
 import type {
   Announcement,
   Connection,
@@ -9,33 +10,100 @@ import type {
   Venue,
 } from '@/types';
 
-export async function pullAllData(): Promise<void> {
-  await Promise.all([
-    pullVenues(),
-    pullIntensiveTrainers(),
-    pullEventDays(),
-    pullSchedule(),
-    pullAnnouncements(),
-    pullConnections(),
-    pullSettings(),
-  ]);
+const MIN_SYNC_OVERLAY_MS = 450;
+
+/** Обновить таблицу без clear() — иначе список на экране на мгновение пустеет и «дёргается». */
+type IdRow = { id: string };
+
+type SyncableTable = {
+  bulkPut: (items: IdRow[]) => Promise<unknown>;
+  toCollection: () => { primaryKeys: () => Promise<Array<string | number>> };
+  bulkDelete: (keys: Array<string | number>) => Promise<unknown>;
+  clear: () => Promise<void>;
+};
+
+function asSyncTable(table: unknown): SyncableTable {
+  return table as SyncableTable;
 }
 
-export async function pullVenues(): Promise<Venue[]> {
+async function replaceTableRows(table: unknown, items: IdRow[]): Promise<void> {
+  const t = asSyncTable(table);
+  if (items.length > 0) {
+    await t.bulkPut(items);
+  }
+  const keep = new Set(items.map((i) => i.id));
+  const existing = await t.toCollection().primaryKeys();
+  const toDelete = existing.filter((id) => !keep.has(String(id)));
+  if (toDelete.length > 0) {
+    await t.bulkDelete(toDelete);
+  } else if (items.length === 0) {
+    await t.clear();
+  }
+}
+
+export async function pullAllData(): Promise<void> {
+  const { setDataSyncing } = useSession.getState();
+  const started = Date.now();
+  setDataSyncing(true);
+  try {
+    const [venues, trainers, days, events, announcements, connections] = await Promise.all([
+      fetchVenues(),
+      fetchTrainers(),
+      fetchEventDays(),
+      fetchScheduleEvents(),
+      fetchAnnouncements(),
+      fetchConnections(),
+    ]);
+
+    await db.transaction(
+      'rw',
+      [
+        db.venues,
+        db.intensiveTrainers,
+        db.eventDays,
+        db.scheduleEvents,
+        db.announcements,
+        db.connections,
+      ],
+      async () => {
+        await replaceTableRows(db.venues, venues);
+        await replaceTableRows(db.intensiveTrainers, trainers);
+        await replaceTableRows(db.eventDays, days);
+        await replaceTableRows(db.scheduleEvents, events);
+        await replaceTableRows(db.announcements, announcements);
+        await replaceTableRows(db.connections, connections);
+      },
+    );
+
+    await Promise.all([
+      setLastSyncTime('venues'),
+      setLastSyncTime('intensiveTrainers'),
+      setLastSyncTime('eventDays'),
+      setLastSyncTime('schedule'),
+      setLastSyncTime('announcements'),
+    ]);
+    await pullSettings();
+  } finally {
+    const elapsed = Date.now() - started;
+    const wait = MIN_SYNC_OVERLAY_MS - elapsed;
+    if (wait > 0) {
+      await new Promise((r) => setTimeout(r, wait));
+    }
+    useSession.getState().setDataSyncing(false);
+  }
+}
+
+async function fetchVenues(): Promise<Venue[]> {
   const { data, error } = await supabase
     .from('venues')
     .select('*')
     .eq('is_active', true)
     .order('sort_order');
   if (error) throw error;
-  const venues = (data ?? []) as Venue[];
-  await db.venues.clear();
-  await db.venues.bulkPut(venues);
-  await setLastSyncTime('venues');
-  return venues;
+  return (data ?? []) as Venue[];
 }
 
-export async function pullIntensiveTrainers(): Promise<IntensiveTrainer[]> {
+async function fetchTrainers(): Promise<IntensiveTrainer[]> {
   const { data, error } = await supabase
     .from('intensive_trainers')
     .select('*')
@@ -43,27 +111,16 @@ export async function pullIntensiveTrainers(): Promise<IntensiveTrainer[]> {
     .order('sort_order')
     .order('full_name');
   if (error) throw error;
-  const trainers = (data ?? []) as IntensiveTrainer[];
-  await db.intensiveTrainers.clear();
-  await db.intensiveTrainers.bulkPut(trainers);
-  await setLastSyncTime('intensiveTrainers');
-  return trainers;
+  return (data ?? []) as IntensiveTrainer[];
 }
 
-export async function pullEventDays(): Promise<EventDay[]> {
-  const { data, error } = await supabase
-    .from('event_days')
-    .select('*')
-    .order('day_index');
+async function fetchEventDays(): Promise<EventDay[]> {
+  const { data, error } = await supabase.from('event_days').select('*').order('day_index');
   if (error) throw error;
-  const days = (data ?? []) as EventDay[];
-  await db.eventDays.clear();
-  await db.eventDays.bulkPut(days);
-  await setLastSyncTime('eventDays');
-  return days;
+  return (data ?? []) as EventDay[];
 }
 
-export async function pullSchedule(): Promise<ScheduleEvent[]> {
+async function fetchScheduleEvents(): Promise<ScheduleEvent[]> {
   const { data: events, error } = await supabase
     .from('schedule_events')
     .select('*')
@@ -71,42 +128,70 @@ export async function pullSchedule(): Promise<ScheduleEvent[]> {
   if (error) throw error;
   const { data: venues } = await supabase.from('venues').select('*');
   const venueMap = new Map((venues ?? []).map((v) => [v.id, v]));
-  const enriched = ((events ?? []) as ScheduleEvent[]).map((e) => ({
+  return ((events ?? []) as ScheduleEvent[]).map((e) => ({
     ...e,
     venue: e.venue_id ? venueMap.get(e.venue_id) ?? null : null,
-    backup_venue: e.backup_venue_id
-      ? venueMap.get(e.backup_venue_id) ?? null
-      : null,
+    backup_venue: e.backup_venue_id ? venueMap.get(e.backup_venue_id) ?? null : null,
   }));
-  await db.scheduleEvents.clear();
-  await db.scheduleEvents.bulkPut(enriched);
-  await setLastSyncTime('schedule');
-  return enriched;
 }
 
-export async function pullAnnouncements(): Promise<Announcement[]> {
+async function fetchAnnouncements(): Promise<Announcement[]> {
   const { data, error } = await supabase
     .from('announcements')
     .select('*')
     .eq('is_published', true)
     .order('published_at', { ascending: false });
   if (error) throw error;
-  const items = (data ?? []) as Announcement[];
-  await db.announcements.clear();
-  await db.announcements.bulkPut(items);
-  await setLastSyncTime('announcements');
-  return items;
+  return (data ?? []) as Announcement[];
 }
 
-export async function pullConnections(): Promise<Connection[]> {
+async function fetchConnections(): Promise<Connection[]> {
   const { data, error } = await supabase
     .from('connections')
     .select('*')
     .order('created_at', { ascending: false });
   if (error) throw error;
-  const connections = (data ?? []) as Connection[];
-  await db.connections.clear();
-  await db.connections.bulkPut(connections);
+  return (data ?? []) as Connection[];
+}
+
+export async function pullVenues(): Promise<Venue[]> {
+  const venues = await fetchVenues();
+  await replaceTableRows(db.venues, venues);
+  await setLastSyncTime('venues');
+  return venues;
+}
+
+export async function pullIntensiveTrainers(): Promise<IntensiveTrainer[]> {
+  const trainers = await fetchTrainers();
+  await replaceTableRows(db.intensiveTrainers, trainers);
+  await setLastSyncTime('intensiveTrainers');
+  return trainers;
+}
+
+export async function pullEventDays(): Promise<EventDay[]> {
+  const days = await fetchEventDays();
+  await replaceTableRows(db.eventDays, days);
+  await setLastSyncTime('eventDays');
+  return days;
+}
+
+export async function pullSchedule(): Promise<ScheduleEvent[]> {
+  const enriched = await fetchScheduleEvents();
+  await replaceTableRows(db.scheduleEvents, enriched);
+  await setLastSyncTime('schedule');
+  return enriched;
+}
+
+export async function pullAnnouncements(): Promise<Announcement[]> {
+  const items = await fetchAnnouncements();
+  await replaceTableRows(db.announcements, items);
+  await setLastSyncTime('announcements');
+  return items;
+}
+
+export async function pullConnections(): Promise<Connection[]> {
+  const connections = await fetchConnections();
+  await replaceTableRows(db.connections, connections);
   return connections;
 }
 

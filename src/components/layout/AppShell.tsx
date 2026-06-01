@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useSession } from '@/stores/session';
 import { isFeatureEnabled, type FeatureFlag } from '@/config/feature-flags';
 import { isStaffRole } from '@/types';
+import { DataSyncOverlay } from '@/components/layout/DataSyncOverlay';
 
 type NavTab = { to: string; label: string; icon: string; feature?: FeatureFlag };
 
@@ -23,6 +24,7 @@ interface AppShellProps {
 
 export function AppShell({ children, title }: AppShellProps) {
   const pendingSync = useSession((s) => s.pendingSync);
+  const dataSyncing = useSession((s) => s.dataSyncing);
   const profile = useSession((s) => s.profile);
   const tabs = baseTabs.filter((t) => !t.feature || isFeatureEnabled(t.feature));
 
@@ -54,6 +56,8 @@ export function AppShell({ children, title }: AppShellProps) {
       </header>
 
       <main className="mx-auto w-full max-w-lg flex-1 px-4 py-4 pb-24">{children}</main>
+
+      {dataSyncing && <DataSyncOverlay />}
 
       <nav className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto flex max-w-lg justify-around">

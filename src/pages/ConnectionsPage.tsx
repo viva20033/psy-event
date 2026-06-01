@@ -14,7 +14,7 @@ import { requestConnection, respondConnection } from '@/services/connections';
 import { pullConnections } from '@/lib/offline/sync';
 import { supabase } from '@/lib/supabase/client';
 import type { Connection, ConnectionType, Group, Profile, UserRole } from '@/types';
-import { CONNECTION_TYPE_LABELS } from '@/types';
+import { CONNECTION_TYPE_LABELS, isStaffRole } from '@/types';
 
 const CONNECTION_MAP: Record<string, ConnectionType> = {
   therapist: 'client_therapist',
@@ -269,6 +269,7 @@ export function ConnectionsPage() {
 
   const isClient = profile.role === 'client';
   const isTherapist = profile.role === 'therapist';
+  const canPickProcessGroup = !isStaffRole(profile.role);
 
   return (
     <AppShell title="Мои связи">
@@ -282,7 +283,10 @@ export function ConnectionsPage() {
           <ol className="list-decimal list-inside space-y-1 text-primary-800">
             <li>Клиент выбирает терапевта → терапевт подтверждает</li>
             <li>Терапевт выбирает супервизора → супервизор подтверждает</li>
-            <li>Клиент выбирает процесс-группу → ведущий группы подтверждает</li>
+            <li>
+              Участник (клиент или терапевт) выбирает процесс-группу → ведущий подтверждает.
+              Группы смешанные.
+            </li>
           </ol>
         </Card>
 
@@ -312,13 +316,41 @@ export function ConnectionsPage() {
         {isTherapist && (
           <Card className="space-y-3">
             <h3 className="font-semibold">Я — терапевт</h3>
-            <p className="text-sm text-slate-600">После выбора супервизора:</p>
+            <p className="text-sm text-slate-600">
+              После выбора супервизора и процесс-группы (группы смешанные — клиенты и терапевты
+              вместе):
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={mode === 'supervisor' ? 'primary' : 'secondary'}
+                onClick={() => loadTherapistsOrSupervisors('supervisor')}
+              >
+                Выбрать супервизора
+              </Button>
+              <Button
+                size="sm"
+                variant={mode === 'process_group' ? 'primary' : 'secondary'}
+                onClick={loadProcessGroups}
+              >
+                Выбрать процесс-группу
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {!isClient && !isTherapist && canPickProcessGroup && (
+          <Card className="space-y-3">
+            <h3 className="font-semibold">Процесс-группа</h3>
+            <p className="text-sm text-slate-600">
+              Смешанные группы — после живого выбора на площадке:
+            </p>
             <Button
               size="sm"
-              variant={mode === 'supervisor' ? 'primary' : 'secondary'}
-              onClick={() => loadTherapistsOrSupervisors('supervisor')}
+              variant={mode === 'process_group' ? 'primary' : 'secondary'}
+              onClick={loadProcessGroups}
             >
-              Выбрать супервизора
+              Выбрать процесс-группу
             </Button>
           </Card>
         )}

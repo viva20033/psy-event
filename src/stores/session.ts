@@ -10,9 +10,12 @@ interface SessionState {
   profile: Profile | null;
   isHydrated: boolean;
   pendingSync: boolean;
+  /** Фоновое обновление кэша с сервера — показываем мягкий оверлей, не «прыгающий» UI */
+  dataSyncing: boolean;
   setProfile: (profile: Profile) => Promise<void>;
   clearSession: () => Promise<void>;
   setPendingSync: (v: boolean) => void;
+  setDataSyncing: (v: boolean) => void;
   hydrate: () => void;
 }
 
@@ -22,17 +25,19 @@ export const useSession = create<SessionState>()(
       profile: null,
       isHydrated: false,
       pendingSync: false,
+      dataSyncing: false,
       setProfile: async (profile) => {
         setAccessCode(profile.access_code);
         await db.profile.put(profile);
-        set({ profile, pendingSync: false });
+        set({ profile, pendingSync: false, dataSyncing: false });
       },
       clearSession: async () => {
         setAccessCode(null);
         await db.profile.clear();
-        set({ profile: null, pendingSync: false });
+        set({ profile: null, pendingSync: false, dataSyncing: false });
       },
       setPendingSync: (pendingSync) => set({ pendingSync }),
+      setDataSyncing: (dataSyncing) => set({ dataSyncing }),
       hydrate: () => set({ isHydrated: true }),
     }),
     {
