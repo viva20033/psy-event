@@ -9,65 +9,87 @@ import type { IntensiveTrainer, Venue } from '@/types';
 
 type InfoTab = 'venues' | 'trainers';
 
+function VenueDetails({ venue }: { venue: Venue }) {
+  return (
+    <div className="space-y-3 border-t border-slate-100 pt-3">
+      {venue.photo_url && (
+        <img
+          src={venue.photo_url}
+          alt={venue.name}
+          className="w-full rounded-xl object-cover max-h-56"
+        />
+      )}
+      {venue.description && <p className="text-sm text-slate-700">{venue.description}</p>}
+      {venue.landmark && (
+        <p className="text-sm text-slate-700">
+          <span className="font-medium text-slate-800">Ориентир:</span> {venue.landmark}
+        </p>
+      )}
+      {venue.route_hint && (
+        <p className="text-sm text-slate-700">
+          <span className="font-medium text-slate-800">Как пройти:</span> {venue.route_hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function VenuesTab({
   venues,
-  selected,
-  onSelect,
+  expandedId,
+  onToggle,
 }: {
   venues: Venue[];
-  selected: Venue | null;
-  onSelect: (v: Venue | null) => void;
+  expandedId: string | null;
+  onToggle: (id: string) => void;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <Card className="bg-primary-50 border-primary-100">
         <p className="text-sm text-primary-800">
-          Схема территории санатория. Выберите место — увидите фото и маршрут словами.
+          Нажмите на место — описание раскроется прямо в списке.
         </p>
       </Card>
-      <ul className="space-y-2">
-        {venues.map((v) => (
-          <li key={v.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(selected?.id === v.id ? null : v)}
+      <ul className="flex flex-col gap-2">
+        {venues.map((v) => {
+          const open = expandedId === v.id;
+          return (
+            <li
+              key={v.id}
               className={cn(
-                'w-full rounded-xl border px-4 py-3 text-left active:bg-slate-50',
-                selected?.id === v.id
-                  ? 'border-primary-300 bg-primary-50'
-                  : 'border-slate-200 bg-white',
+                'rounded-xl border bg-white overflow-hidden transition-colors',
+                open ? 'border-primary-300 shadow-sm' : 'border-slate-200',
               )}
             >
-              <span className="font-medium text-primary-900">{v.name}</span>
-            </button>
-          </li>
-        ))}
+              <button
+                type="button"
+                onClick={() => onToggle(v.id)}
+                aria-expanded={open}
+                className={cn(
+                  'flex w-full items-center justify-between gap-2 px-4 py-3 text-left active:bg-slate-50',
+                  open && 'bg-primary-50',
+                )}
+              >
+                <span className="font-medium text-primary-900">{v.name}</span>
+                <span
+                  className={cn(
+                    'text-slate-400 text-lg leading-none transition-transform',
+                    open && 'rotate-180',
+                  )}
+                  aria-hidden
+                >
+                  ▾
+                </span>
+              </button>
+              {open && (
+                <div className="px-4 pb-4">
+                  <VenueDetails venue={v} />
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
-      {selected && (
-        <Card className="space-y-3">
-          <h3 className="text-lg font-semibold">{selected.name}</h3>
-          {selected.photo_url && (
-            <img
-              src={selected.photo_url}
-              alt={selected.name}
-              className="w-full rounded-xl object-cover max-h-56"
-            />
-          )}
-          {selected.description && (
-            <p className="text-sm text-slate-700">{selected.description}</p>
-          )}
-          {selected.landmark && (
-            <p className="text-sm">
-              <span className="font-medium">Ориентир:</span> {selected.landmark}
-            </p>
-          )}
-          {selected.route_hint && (
-            <p className="text-sm">
-              <span className="font-medium">Как пройти:</span> {selected.route_hint}
-            </p>
-          )}
-        </Card>
-      )}
     </div>
   );
 }
@@ -166,7 +188,7 @@ export function InformationPage() {
   const [tab, setTab] = useState<InfoTab>(
     tabParam === 'trainers' || trainerParam ? 'trainers' : 'venues',
   );
-  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
+  const [expandedVenueId, setExpandedVenueId] = useState<string | null>(null);
   const [selectedTrainerId, setSelectedTrainerId] = useState<string | null>(trainerParam);
 
   useEffect(() => {
@@ -180,7 +202,7 @@ export function InformationPage() {
 
   function switchTab(next: InfoTab) {
     setTab(next);
-    setSelectedVenue(null);
+    setExpandedVenueId(null);
     if (next === 'venues') {
       setSelectedTrainerId(null);
       setSearchParams({});
@@ -221,7 +243,11 @@ export function InformationPage() {
       </div>
 
       {tab === 'venues' ? (
-        <VenuesTab venues={venues} selected={selectedVenue} onSelect={setSelectedVenue} />
+        <VenuesTab
+          venues={venues}
+          expandedId={expandedVenueId}
+          onToggle={(id) => setExpandedVenueId((prev) => (prev === id ? null : id))}
+        />
       ) : (
         <TrainersTab
           trainers={intensiveTrainers}

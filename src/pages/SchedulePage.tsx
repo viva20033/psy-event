@@ -21,7 +21,7 @@ export function SchedulePage() {
 
   return (
     <AppShell title="Моё расписание">
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {eventDays.map((day) => (
             <button
@@ -51,6 +51,7 @@ export function SchedulePage() {
               <EventCard
                 event={event}
                 venue={resolveActiveVenue(event, settings.rain_mode)}
+                collapsibleVenue
               />
             </div>
           ))
