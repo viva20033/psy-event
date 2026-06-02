@@ -55,7 +55,9 @@ export function AppShell({ children, title }: AppShellProps) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-lg flex-1 px-4 py-4 pb-24">{children}</main>
+      <main className="mx-auto w-full max-w-lg flex-1 px-4 py-4 pb-24 [&_a:has(button)]:block [&_a:has(button)]:w-full">
+        {children}
+      </main>
 
       {dataSyncing && <DataSyncOverlay />}
 

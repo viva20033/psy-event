@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { ButtonLink } from '@/components/ui/ButtonLink';
+import { PageActions } from '@/components/ui/PageActions';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { EventCard } from '@/components/ui/EventCard';
 import { useOfflineData } from '@/hooks/useOfflineData';
 import { env } from '@/config/env';
@@ -36,7 +36,7 @@ export function LostPage() {
 
   return (
     <AppShell title="Я потерялся">
-      <div className="space-y-4">
+      <div className="flex flex-col gap-5">
         {target ? (
           <>
             <Card className="bg-primary-50 border-primary-200">
@@ -68,9 +68,9 @@ export function LostPage() {
           </a>
         </Card>
 
-        <Link to="/">
-          <Button fullWidth>На главную</Button>
-        </Link>
+        <PageActions separated>
+          <ButtonLink to="/">На главную</ButtonLink>
+        </PageActions>
       </div>
     </AppShell>
   );

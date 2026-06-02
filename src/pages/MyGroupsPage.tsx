@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
+import { PageActions } from '@/components/ui/PageActions';
 import { useSession } from '@/stores/session';
 import { useOfflineData } from '@/hooks/useOfflineData';
 import {
@@ -34,7 +35,7 @@ export function MyGroupsPage() {
 
   return (
     <AppShell title="Мои группы">
-      <div className="space-y-4">
+      <div className="flex flex-col gap-5">
         <Card className="bg-primary-50 border-primary-100 text-sm text-primary-900 space-y-2">
           <p>
             <strong>Ваши группы</strong> формируют организаторы. Проверьте состав: нет ли в одной
@@ -148,11 +149,11 @@ export function MyGroupsPage() {
           );
         })}
 
-        <Link to="/">
-          <Button variant="secondary" fullWidth>
+        <PageActions separated>
+          <ButtonLink to="/" variant="secondary">
             На главную
-          </Button>
-        </Link>
+          </ButtonLink>
+        </PageActions>
       </div>
     </AppShell>
   );

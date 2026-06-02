@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
+import { PageActions } from '@/components/ui/PageActions';
 import { Input } from '@/components/ui/Input';
 import { FormField, adminTextareaClass } from '@/components/admin/FormField';
 import { TrainerCardDetail } from '@/components/trainers/TrainerCardDetail';
@@ -86,7 +87,7 @@ export function ProfilePage() {
 
   return (
     <AppShell title="Мой профиль">
-      <div className="space-y-4">
+      <div className="flex flex-col gap-5">
         <Card>
           <p className="text-sm text-slate-500">Участник интенсива</p>
           <h2 className="text-xl font-bold text-primary-900">{profile.full_name}</h2>
@@ -102,11 +103,9 @@ export function ProfilePage() {
               Если вы тренер интенсива — попросите организаторов добавить вас в админке и
               привязать к вашему участнику.
             </p>
-            <Link to="/information?tab=trainers">
-              <Button variant="secondary" fullWidth>
-                Справочник тренеров
-              </Button>
-            </Link>
+            <ButtonLink to="/information?tab=trainers" variant="secondary" className="mt-3">
+              Справочник тренеров
+            </ButtonLink>
           </Card>
         )}
 
@@ -119,14 +118,14 @@ export function ProfilePage() {
             <Card>
               <TrainerCardDetail trainer={trainer} />
             </Card>
-            <Button variant="secondary" fullWidth onClick={() => setEditing(true)}>
-              Редактировать карточку
-            </Button>
-            <Link to="/information?tab=trainers">
-              <Button variant="ghost" fullWidth>
-                Как видят другие в справочнике
+            <PageActions>
+              <Button variant="secondary" fullWidth onClick={() => setEditing(true)}>
+                Редактировать карточку
               </Button>
-            </Link>
+              <ButtonLink to="/information?tab=trainers" variant="ghost">
+                Как видят другие в справочнике
+              </ButtonLink>
+            </PageActions>
           </>
         )}
 
@@ -224,11 +223,11 @@ export function ProfilePage() {
           <p className="text-sm text-center text-primary-700">{message}</p>
         )}
 
-        <Link to="/">
-          <Button variant="ghost" fullWidth>
+        <PageActions separated>
+          <ButtonLink to="/" variant="ghost">
             На главную
-          </Button>
-        </Link>
+          </ButtonLink>
+        </PageActions>
       </div>
     </AppShell>
   );

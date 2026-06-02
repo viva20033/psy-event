@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { differenceInSeconds, parseISO } from 'date-fns';
 import { AppShell } from '@/components/layout/AppShell';
 import { EventCard } from '@/components/ui/EventCard';
-import { Button } from '@/components/ui/Button';
+import { ButtonLink } from '@/components/ui/ButtonLink';
+import { PageActions } from '@/components/ui/PageActions';
 import { Card } from '@/components/ui/Card';
 import { PriorityBadge } from '@/components/ui/Badge';
 import { useOfflineData } from '@/hooks/useOfflineData';
@@ -62,7 +62,7 @@ export function TodayPage() {
 
   return (
     <AppShell title="Мой день">
-      <div className="space-y-4">
+      <div className="flex flex-col gap-5">
         <Card>
           <p className="text-sm text-slate-500">Здравствуйте</p>
           <h2 className="text-xl font-bold text-primary-900">{profile.full_name}</h2>
@@ -117,17 +117,14 @@ export function TodayPage() {
           </section>
         )}
 
-        <Link to="/my-groups">
-          <Button variant="secondary" fullWidth>
+        <PageActions separated>
+          <ButtonLink to="/my-groups" variant="secondary">
             Мои группы
-          </Button>
-        </Link>
-
-        <Link to="/lost">
-          <Button variant="ghost" fullWidth>
+          </ButtonLink>
+          <ButtonLink to="/lost" variant="ghost">
             Я потерялся
-          </Button>
-        </Link>
+          </ButtonLink>
+        </PageActions>
       </div>
     </AppShell>
   );
