@@ -11,7 +11,7 @@
  *
  *   node scripts/batch-import-trainers.mjs
  *   node scripts/batch-import-trainers.mjs --dry-run
- *   node scripts/batch-import-trainers.mjs --refresh   # только повторный импорт с сайта
+ *   node scripts/batch-import-trainers.mjs --refresh   # повторный импорт (в т.ч. фото в storage)
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -161,13 +161,55 @@ async function importFromGestalt(gestaltUrl) {
       apikey: serviceKey,
       'x-access-code': adminCode,
     },
-    body: JSON.stringify({ gestalt_url: gestaltUrl, mirror_photo: true }),
+    body: JSON.stringify({ gestalt_url: gestaltUrl, mirror_photo: false }),
   });
   const json = await res.json();
   if (!res.ok || !json.ok) {
     throw new Error(json.error ?? `HTTP ${res.status}`);
   }
   return json.data;
+}
+
+function needsPhotoMirror(photoUrl) {
+  if (!photoUrl) return false;
+  if (/gestalt\.ru|geshtalt\.ru/i.test(photoUrl)) return true;
+  if (/kong|localhost|127\.0\.0\.1/i.test(photoUrl)) return true;
+  const publicPrefix = `${supabaseUrl}/storage/v1/object/public/trainer-photos/`;
+  return !photoUrl.startsWith(publicPrefix);
+}
+
+async function mirrorPhotoToStorage(remoteUrl, slug) {
+  const res = await fetch(remoteUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; MGI-Intensive/1.0)',
+      Referer: 'https://gestalt.ru/',
+      Accept: 'image/*',
+    },
+  });
+  if (!res.ok) throw new Error(`скачивание фото: HTTP ${res.status}`);
+  const contentType = res.headers.get('content-type') ?? 'image/jpeg';
+  if (!contentType.startsWith('image/')) throw new Error(`не изображение: ${contentType}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.byteLength > 5 * 1024 * 1024) throw new Error('фото больше 5 МБ');
+  const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+  const path = `imported/${slug.replace(/[^a-z0-9_-]+/gi, '-')}-${Date.now()}.${ext}`;
+
+  const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/trainer-photos/${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+      'Content-Type': contentType,
+      'Cache-Control': '31536000',
+      'x-upsert': 'false',
+    },
+    body: buf,
+  });
+  if (!uploadRes.ok) {
+    const err = await uploadRes.text();
+    throw new Error(`storage: ${err || uploadRes.status}`);
+  }
+  return `${supabaseUrl}/storage/v1/object/public/trainer-photos/${path}`;
 }
 
 const createdCodes = [];
@@ -234,9 +276,22 @@ for (let i = 0; i < TRAINERS_TEAM.length; i++) {
     console.log(`  импорт с gestalt.ru…`);
     const imported = await importFromGestalt(gestaltUrl);
 
+    let photoUrl = imported.photo_url;
+    if (photoUrl && needsPhotoMirror(photoUrl)) {
+      try {
+        photoUrl = await mirrorPhotoToStorage(photoUrl, slugFromUrl(gestaltUrl));
+        console.log(`  ✓ фото → storage`);
+      } catch (photoErr) {
+        const photoMsg = photoErr instanceof Error ? photoErr.message : String(photoErr);
+        console.warn(`  ⚠ фото не загружено: ${photoMsg}`);
+      }
+    } else if (!photoUrl) {
+      console.warn(`  ⚠ фото на странице не найдено`);
+    }
+
     await patchRows('intensive_trainers', `id=eq.${trainerId}`, {
       full_name: imported.full_name,
-      photo_url: imported.photo_url,
+      photo_url: photoUrl,
       status_line: imported.status_line,
       bio: imported.bio,
       specializations: imported.specializations,

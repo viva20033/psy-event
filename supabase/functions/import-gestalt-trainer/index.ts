@@ -140,6 +140,15 @@ async function isStaff(
   return role === 'organizer' || role === 'admin';
 }
 
+function storagePublicUrl(bucket: string, objectPath: string): string {
+  const base =
+    Deno.env.get('SUPABASE_PUBLIC_URL') ??
+    Deno.env.get('API_EXTERNAL_URL') ??
+    Deno.env.get('SUPABASE_URL') ??
+    '';
+  return `${base.replace(/\/$/, '')}/storage/v1/object/public/${bucket}/${objectPath}`;
+}
+
 async function mirrorPhotoToStorage(
   supabase: ReturnType<typeof createClient>,
   remoteUrl: string,
@@ -147,11 +156,21 @@ async function mirrorPhotoToStorage(
 ): Promise<string | null> {
   try {
     const res = await fetch(remoteUrl, {
-      headers: { 'User-Agent': 'MGI-Intensive-PWA/1.0 (import)' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; MGI-Intensive-PWA/1.0)',
+        Referer: 'https://gestalt.ru/',
+        Accept: 'image/*',
+      },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error('mirror photo fetch', res.status, remoteUrl);
+      return null;
+    }
     const contentType = res.headers.get('content-type') ?? 'image/jpeg';
-    if (!contentType.startsWith('image/')) return null;
+    if (!contentType.startsWith('image/')) {
+      console.error('mirror photo not image', contentType);
+      return null;
+    }
     const buf = await res.arrayBuffer();
     if (buf.byteLength > 5 * 1024 * 1024) return null;
     const ext = contentType.includes('png')
@@ -169,8 +188,7 @@ async function mirrorPhotoToStorage(
       console.error('storage upload', error.message);
       return null;
     }
-    const { data } = supabase.storage.from('trainer-photos').getPublicUrl(path);
-    return data.publicUrl;
+    return storagePublicUrl('trainer-photos', path);
   } catch (e) {
     console.error('mirror photo', e);
     return null;
