@@ -11,6 +11,7 @@ import { ProfilePage } from '@/pages/ProfilePage';
 import { AnnouncementsPage } from '@/pages/AnnouncementsPage';
 import { LostPage } from '@/pages/LostPage';
 import { AdminPage } from '@/pages/admin/AdminPage';
+import { OfficePage } from '@/pages/office/OfficePage';
 import { ChatPage } from '@/pages/ChatPage';
 import { isFeatureEnabled } from '@/config/feature-flags';
 
@@ -60,6 +61,16 @@ export function AppRouter() {
       <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
       <Route path="/announcements" element={<RequireAuth><AnnouncementsPage /></RequireAuth>} />
       <Route path="/lost" element={<RequireAuth><LostPage /></RequireAuth>} />
+      <Route
+        path="/office"
+        element={
+          <RequireAuth>
+            <RequireStaff>
+              <OfficePage />
+            </RequireStaff>
+          </RequireAuth>
+        }
+      />
       <Route
         path="/admin"
         element={

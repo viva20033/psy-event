@@ -23,3 +23,8 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Desktop office: reuse mobile admin sections with more width */
+.office-panel > div > .space-y-4 {
+  max-width: 72rem;
+}

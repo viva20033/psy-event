@@ -33,6 +33,7 @@ npm run dev
 8. Тренеры интенсива (справочник + фото): `supabase/migrations/008_intensive_trainers.sql`  
    Edge Function импорта с gestalt.ru:  
    `npx supabase functions deploy import-gestalt-trainer --no-verify-jwt`
+9. Центр управления (office): `supabase/migrations/009_office_connections_staff.sql` — правка связей организатором
 9. Импорт расписания (19 июня — 1 июля 2026): `supabase/migrations/002_schedule_2026.sql`  
    Перед повторным запуском сделайте бэкап — скрипт удаляет все события в `schedule_events`.  
    Чтобы пересобрать SQL после правок: `npm run schedule:sql` (редактируйте `scripts/schedule-2026-data.mjs`).
@@ -90,6 +91,7 @@ supabase/migrations/
 | `/chat` | Болталка (общий чат) |
 | `/lost` | Я потерялся |
 | `/admin` | Админка (organizer/admin) |
+| `/office` | Центр управления на большом экране (organizer/admin, без ссылки в меню) |
 | `/login?code=XXX` | Вход по коду |
 
 ## Авторизация
