@@ -23,3 +23,6 @@ dev-dist/
 
 # Temp PDF renders (OCR)
 scripts/pdf-preview/
+
+# Generated trainer import codes (secrets)
+scripts/trainer-access-codes.json

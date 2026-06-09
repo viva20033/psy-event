@@ -1,6 +1,7 @@
 export type UserRole =
   | 'client'
   | 'therapist'
+  | 'trainer'
   | 'supervisor'
   | 'hypervisor'
   | 'organizer'
@@ -188,6 +189,7 @@ export interface SyncQueueItem {
 export const ROLE_LABELS: Record<UserRole, string> = {
   client: 'Клиент',
   therapist: 'Терапевт',
+  trainer: 'Тренер интенсива',
   supervisor: 'Супервизор',
   hypervisor: 'Гипервизор',
   organizer: 'Организатор',

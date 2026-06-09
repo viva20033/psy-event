@@ -61,6 +61,7 @@ export function findCurrentDay(
 export const ROLE_LABELS_SHORT: Record<UserRole, string> = {
   client: 'Клиент',
   therapist: 'Терапевт',
+  trainer: 'Тренер',
   supervisor: 'Супервизор',
   hypervisor: 'Гипервизор',
   organizer: 'Организатор',
