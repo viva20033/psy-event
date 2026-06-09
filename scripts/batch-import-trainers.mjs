@@ -259,6 +259,13 @@ for (let i = 0; i < TRAINERS_TEAM.length; i++) {
     const msg = e instanceof Error ? e.message : String(e);
     errors.push({ label, msg });
     console.error(`✗ ${label}: ${msg}`);
+    if (msg.includes('enum user_role') && msg.includes('trainer') && errors.length === 1) {
+      console.error(
+        '\n→ Сначала примените миграцию на VPS:\n' +
+          '  docker compose -f ~/supabase/docker/docker-compose.yml exec -T db \\\n' +
+          '    psql -U postgres -d postgres < supabase/migrations/010_trainer_role.sql\n',
+      );
+    }
   }
 }
 
