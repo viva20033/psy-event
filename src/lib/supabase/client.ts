@@ -17,6 +17,20 @@ function buildHeaders(): Record<string, string> {
   return accessCode ? { 'x-access-code': accessCode } : {};
 }
 
+const FETCH_TIMEOUT_MS = 20_000;
+
+/** Без таймаута fetch может висеть минуту — весь pullAllData блокируется. */
+function fetchWithTimeout(url: RequestInfo | URL, options: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const userSignal = options.signal;
+  if (userSignal) {
+    if (userSignal.aborted) controller.abort();
+    else userSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 function buildClient(): SupabaseClient {
   if (!isConfigured()) {
     throw new Error(
@@ -31,7 +45,7 @@ function buildClient(): SupabaseClient {
         if (accessCode) {
           headers.set('x-access-code', accessCode);
         }
-        return fetch(url, { ...options, headers });
+        return fetchWithTimeout(url, { ...options, headers });
       },
     },
   });

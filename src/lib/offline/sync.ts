@@ -41,19 +41,83 @@ async function replaceTableRows(table: unknown, items: IdRow[]): Promise<void> {
   }
 }
 
+async function pullAllDataSets(): Promise<{
+  venues: Venue[];
+  trainers: IntensiveTrainer[];
+  days: EventDay[];
+  events: ScheduleEvent[];
+  announcements: Announcement[];
+  connections: Connection[];
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  let venues: Venue[] = [];
+  let trainers: IntensiveTrainer[] = [];
+  let days: EventDay[] = [];
+  let events: ScheduleEvent[] = [];
+  let announcements: Announcement[] = [];
+  let connections: Connection[] = [];
+
+  // Последовательно, не пачкой — 6 параллельных запросов давали ERR_CONNECTION_RESET на nginx/Kong
+  const steps: Array<{ label: string; run: () => Promise<void> }> = [
+    {
+      label: 'места',
+      run: async () => {
+        venues = await fetchVenues();
+      },
+    },
+    {
+      label: 'тренеры',
+      run: async () => {
+        trainers = await fetchTrainers();
+      },
+    },
+    {
+      label: 'дни',
+      run: async () => {
+        days = await fetchEventDays();
+      },
+    },
+    {
+      label: 'расписание',
+      run: async () => {
+        events = await fetchScheduleEvents(venues);
+      },
+    },
+    {
+      label: 'объявления',
+      run: async () => {
+        announcements = await fetchAnnouncements();
+      },
+    },
+    {
+      label: 'связи',
+      run: async () => {
+        connections = await fetchConnections();
+      },
+    },
+  ];
+
+  for (const step of steps) {
+    try {
+      await step.run();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`${step.label}: ${msg}`);
+      console.warn('[sync]', step.label, e);
+    }
+  }
+
+  return { venues, trainers, days, events, announcements, connections, errors };
+}
+
 export async function pullAllData(): Promise<void> {
   const { setDataSyncing } = useSession.getState();
   const started = Date.now();
   setDataSyncing(true);
   try {
-    const [venues, trainers, days, events, announcements, connections] = await Promise.all([
-      fetchVenues(),
-      fetchTrainers(),
-      fetchEventDays(),
-      fetchScheduleEvents(),
-      fetchAnnouncements(),
-      fetchConnections(),
-    ]);
+    const { venues, trainers, days, events, announcements, connections, errors } =
+      await pullAllDataSets();
 
     await db.transaction(
       'rw',
@@ -82,7 +146,13 @@ export async function pullAllData(): Promise<void> {
       setLastSyncTime('schedule'),
       setLastSyncTime('announcements'),
     ]);
-    await pullSettings();
+    await pullSettings().catch((e) => {
+      console.warn('[sync] настройки', e);
+    });
+
+    if (errors.length) {
+      console.warn('[sync] частичная загрузка:', errors.join('; '));
+    }
   } finally {
     const elapsed = Date.now() - started;
     const wait = MIN_SYNC_OVERLAY_MS - elapsed;
@@ -120,14 +190,13 @@ async function fetchEventDays(): Promise<EventDay[]> {
   return (data ?? []) as EventDay[];
 }
 
-async function fetchScheduleEvents(): Promise<ScheduleEvent[]> {
+async function fetchScheduleEvents(venues: Venue[]): Promise<ScheduleEvent[]> {
   const { data: events, error } = await supabase
     .from('schedule_events')
     .select('*')
     .order('starts_at');
   if (error) throw error;
-  const { data: venues } = await supabase.from('venues').select('*');
-  const venueMap = new Map((venues ?? []).map((v) => [v.id, v]));
+  const venueMap = new Map(venues.map((v) => [v.id, v]));
   return ((events ?? []) as ScheduleEvent[]).map((e) => ({
     ...e,
     venue: e.venue_id ? venueMap.get(e.venue_id) ?? null : null,
@@ -176,7 +245,8 @@ export async function pullEventDays(): Promise<EventDay[]> {
 }
 
 export async function pullSchedule(): Promise<ScheduleEvent[]> {
-  const enriched = await fetchScheduleEvents();
+  const venues = await fetchVenues();
+  const enriched = await fetchScheduleEvents(venues);
   await replaceTableRows(db.scheduleEvents, enriched);
   await setLastSyncTime('schedule');
   return enriched;
