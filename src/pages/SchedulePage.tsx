@@ -1,17 +1,26 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { AppShell } from '@/components/layout/AppShell';
 import { EventCard } from '@/components/ui/EventCard';
 import { useOfflineData } from '@/hooks/useOfflineData';
-import { resolveActiveVenue } from '@/lib/utils/schedule';
+import { findCurrentDay, resolveActiveVenue } from '@/lib/utils/schedule';
 import { cn } from '@/lib/utils/cn';
 
 export function SchedulePage() {
   const { eventDays, scheduleEvents, settings } = useOfflineData();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const scrolledRef = useRef(false);
 
-  const activeDayId = selectedDayId ?? eventDays[0]?.id ?? null;
+  const currentDay = useMemo(() => findCurrentDay(eventDays), [eventDays]);
+  const activeDayId = selectedDayId ?? currentDay?.id ?? eventDays[0]?.id ?? null;
+
+  useEffect(() => {
+    if (selectedDayId !== null || !activeDayId || scrolledRef.current) return;
+    const el = document.querySelector(`[data-schedule-day="${activeDayId}"]`);
+    el?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    scrolledRef.current = true;
+  }, [activeDayId, selectedDayId]);
 
   const dayEvents = useMemo(() => {
     return scheduleEvents
@@ -27,6 +36,7 @@ export function SchedulePage() {
             <button
               key={day.id}
               type="button"
+              data-schedule-day={day.id}
               onClick={() => setSelectedDayId(day.id)}
               className={cn(
                 'shrink-0 rounded-full px-3 py-2 text-sm font-medium',
