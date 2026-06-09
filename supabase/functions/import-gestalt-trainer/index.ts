@@ -36,7 +36,7 @@ function normalizeGestaltUrl(raw: string): string {
   return u.toString();
 }
 
-function decodeHtml(s: string): string {
+function decodeEntities(s: string): string {
   return s
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -44,19 +44,70 @@ function decodeHtml(s: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/<[^>]+>/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
+/** Текст из HTML с сохранением переносов (br, p, li, div). */
+function htmlToPlainText(html: string): string {
+  let s = html;
+  s = s.replace(/<br\s*\/?>/gi, '\n');
+  s = s.replace(/<\/p>/gi, '\n\n');
+  s = s.replace(/<\/li>/gi, '\n');
+  s = s.replace(/<\/div>/gi, '\n');
+  s = s.replace(/<\/h[1-6]>/gi, '\n');
+  s = s.replace(/<li[^>]*>/gi, '\n');
+  s = s.replace(/<[^>]+>/g, '');
+  s = decodeEntities(s);
+  return s
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
-function extractSection(html: string, heading: string): string | null {
+function htmlToPlainTextInline(html: string): string {
+  return decodeEntities(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
+function extractSectionHtml(html: string, heading: string): string | null {
   const re = new RegExp(
     `<h2[^>]*>\\s*${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</h2>([\\s\\S]*?)(?=<h2[^>]*>|$)`,
     'i',
   );
   const m = html.match(re);
-  if (!m) return null;
-  return decodeHtml(m[1]).slice(0, 12000) || null;
+  return m?.[1]?.trim() ?? null;
+}
+
+function extractSection(html: string, heading: string): string | null {
+  const raw = extractSectionHtml(html, heading);
+  if (!raw) return null;
+  return htmlToPlainText(raw).slice(0, 12000) || null;
+}
+
+function extractSpecializations(html: string): string | null {
+  const section = extractSectionHtml(html, 'Специализация');
+  if (!section) return null;
+
+  const items = [...section.matchAll(/<li[^>]*class=['"][^'"]*skill-item[^'"]*['"][^>]*>([\s\S]*?)<\/li>/gi)]
+    .map((m) => htmlToPlainTextInline(m[1]))
+    .filter(Boolean);
+
+  if (items.length > 0) {
+    return items.join('\n');
+  }
+
+  return htmlToPlainText(section).slice(0, 12000) || null;
+}
+
+function extractStatusLine(html: string): string | null {
+  const section = extractSectionHtml(html, 'Статус в сообществе');
+  if (!section) return null;
+  const lines = htmlToPlainText(section)
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return lines.length > 0 ? lines.join('\n') : null;
 }
 
 function extractPhotoUrl(html: string): string | null {
@@ -70,28 +121,36 @@ function extractPhotoUrl(html: string): string | null {
 }
 
 function extractH1Name(html: string): string | null {
-  const m = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-  return m ? decodeHtml(m[1]) : null;
+  const m = html.match(/<h1[^>]*class=['"][^'"]*user-title[^'"]*['"][^>]*>([\s\S]*?)<\/h1>/i);
+  return m ? htmlToPlainTextInline(m[1]) : null;
 }
 
-function extractContactsBeforeH2(html: string): {
+function extractContacts(html: string): {
   phone: string | null;
   email: string | null;
   city: string | null;
 } {
-  const chunk = html.match(/<h1[^>]*>[\s\S]*?<\/h1>([\s\S]*?)(?=<h2|$)/i)?.[1] ?? '';
-  const text = decodeHtml(chunk.replace(/<a[^>]*href="mailto:([^"]+)"[^>]*>[\s\S]*?<\/a>/gi, ' $1 '));
-  const email =
-    chunk.match(/href="mailto:([^"]+)"/i)?.[1]?.trim() ??
-    text.match(/[\w.+-]+@[\w.-]+\.\w{2,}/)?.[0] ??
-    null;
+  const card =
+    html.match(
+      /<h1[^>]*class=['"][^'"]*user-title[^'"]*['"][^>]*>[\s\S]*?<\/div>\s*<\/div>/i,
+    )?.[0] ?? '';
+
   const phone =
-    text.match(/\+?\d[\d\s()-]{8,}\d/)?.[0]?.replace(/\s+/g, ' ').trim() ?? null;
-  const lines = text
-    .split(/\n|\.|,/)
-    .map((l) => l.trim())
-    .filter((l) => l && l.length < 80 && !l.includes('@') && !/^\+?\d/.test(l));
-  const city = lines.find((l) => /^[А-Яа-яA-Za-z]/.test(l) && !/тренер|терапевт/i.test(l)) ?? null;
+    card.match(/class=['"]member-phone['"][^>]*>([^<]+)/i)?.[1]?.replace(/\s+/g, ' ').trim() ??
+    null;
+
+  const emailFromLink = card.match(/href="mailto:([^"]+)"/i)?.[1]?.trim() ?? null;
+  const emailFromText =
+    [...card.matchAll(/<div class=['"]mb-1['"][^>]*>([\s\S]*?)<\/div>/gi)]
+      .map((m) => htmlToPlainTextInline(m[1]))
+      .find((t) => t && t.includes('@')) ?? null;
+  const email = emailFromLink ?? emailFromText;
+
+  const city =
+    [...card.matchAll(/<div class=['"]mb-1['"][^>]*>([\s\S]*?)<\/div>/gi)]
+      .map((m) => htmlToPlainTextInline(m[1]))
+      .find((t) => t && !t.includes('@') && !/^\+?\d[\d\s()-]{6,}/.test(t)) ?? null;
+
   return { phone, email, city };
 }
 
@@ -99,18 +158,10 @@ export function parseGestaltAuthorHtml(html: string, gestaltUrl: string): Gestal
   const full_name = extractH1Name(html);
   if (!full_name) throw new Error('Не найдено имя на странице (тег h1)');
 
-  const statusBlock = extractSection(html, 'Статус в сообществе');
-  const status_line = statusBlock
-    ? statusBlock
-        .split(/\n+/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .join(' · ')
-    : null;
-
+  const status_line = extractStatusLine(html);
   const bio = extractSection(html, 'Описание профессиональной деятельности');
-  const specializations = extractSection(html, 'Специализация');
-  const contacts = extractContactsBeforeH2(html);
+  const specializations = extractSpecializations(html);
+  const contacts = extractContacts(html);
 
   return {
     full_name,

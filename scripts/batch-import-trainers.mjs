@@ -18,6 +18,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TRAINERS_TEAM } from './intensive-trainers-team.mjs';
+import { fetchAndParseGestaltAuthor } from './lib/parse-gestalt-author.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -153,21 +154,7 @@ async function patchRows(table, filter, patch) {
 }
 
 async function importFromGestalt(gestaltUrl) {
-  const res = await fetch(`${supabaseUrl}/functions/v1/import-gestalt-trainer`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${serviceKey}`,
-      apikey: serviceKey,
-      'x-access-code': adminCode,
-    },
-    body: JSON.stringify({ gestalt_url: gestaltUrl, mirror_photo: false }),
-  });
-  const json = await res.json();
-  if (!res.ok || !json.ok) {
-    throw new Error(json.error ?? `HTTP ${res.status}`);
-  }
-  return json.data;
+  return fetchAndParseGestaltAuthor(gestaltUrl);
 }
 
 function needsPhotoMirror(photoUrl) {

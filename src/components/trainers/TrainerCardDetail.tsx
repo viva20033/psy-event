@@ -18,7 +18,7 @@ export function TrainerCardDetail({ trainer, showGestaltLink = true }: TrainerCa
       <div>
         <h2 className="text-xl font-bold text-primary-900">{trainer.full_name}</h2>
         {trainer.status_line && (
-          <p className="text-sm text-primary-700 mt-1">{trainer.status_line}</p>
+          <p className="text-sm text-primary-700 mt-1 whitespace-pre-wrap">{trainer.status_line}</p>
         )}
         {(trainer.city || trainer.phone || trainer.email) && (
           <div className="mt-2 text-sm text-slate-600 space-y-1">
