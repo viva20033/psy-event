@@ -17,10 +17,23 @@ function buildHeaders(): Record<string, string> {
   return accessCode ? { 'x-access-code': accessCode } : {};
 }
 
-const FETCH_TIMEOUT_MS = 20_000;
+const FETCH_TIMEOUT_MS = 45_000;
 
-/** Без таймаута fetch может висеть минуту — весь pullAllData блокируется. */
-function fetchWithTimeout(url: RequestInfo | URL, options: RequestInit = {}): Promise<Response> {
+function isAbortError(e: unknown): boolean {
+  if (e instanceof DOMException && e.name === 'AbortError') return true;
+  if (e && typeof e === 'object') {
+    const msg = String((e as { message?: string }).message ?? '');
+    const details = String((e as { details?: string }).details ?? '');
+    return msg.includes('AbortError') || details.includes('AbortError');
+  }
+  return false;
+}
+
+/** Без таймаута fetch может висеть минуту; с таймаутом — понятная ошибка вместо silent abort. */
+async function fetchWithTimeout(
+  url: RequestInfo | URL,
+  options: RequestInit = {},
+): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   const userSignal = options.signal;
@@ -28,7 +41,16 @@ function fetchWithTimeout(url: RequestInfo | URL, options: RequestInit = {}): Pr
     if (userSignal.aborted) controller.abort();
     else userSignal.addEventListener('abort', () => controller.abort(), { once: true });
   }
-  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (e) {
+    if (isAbortError(e)) {
+      throw new Error(`Сервер не ответил за ${FETCH_TIMEOUT_MS / 1000} с`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function buildClient(): SupabaseClient {

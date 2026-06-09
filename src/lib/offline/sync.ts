@@ -12,6 +12,19 @@ import type {
 
 const MIN_SYNC_OVERLAY_MS = 450;
 
+function syncErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === 'object' && 'message' in e) {
+    return String((e as { message: string }).message);
+  }
+  return String(e);
+}
+
+function throwIfSupabaseError(error: unknown): void {
+  if (!error) return;
+  throw new Error(syncErrorMessage(error));
+}
+
 /** Обновить таблицу без clear() — иначе список на экране на мгновение пустеет и «дёргается». */
 type IdRow = { id: string };
 
@@ -102,8 +115,7 @@ async function pullAllDataSets(): Promise<{
     try {
       await step.run();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      errors.push(`${step.label}: ${msg}`);
+      errors.push(`${step.label}: ${syncErrorMessage(e)}`);
       console.warn('[sync]', step.label, e);
     }
   }
@@ -119,33 +131,38 @@ export async function pullAllData(): Promise<void> {
     const { venues, trainers, days, events, announcements, connections, errors } =
       await pullAllDataSets();
 
-    await db.transaction(
-      'rw',
-      [
-        db.venues,
-        db.intensiveTrainers,
-        db.eventDays,
-        db.scheduleEvents,
-        db.announcements,
-        db.connections,
-      ],
-      async () => {
-        await replaceTableRows(db.venues, venues);
-        await replaceTableRows(db.intensiveTrainers, trainers);
-        await replaceTableRows(db.eventDays, days);
-        await replaceTableRows(db.scheduleEvents, events);
-        await replaceTableRows(db.announcements, announcements);
-        await replaceTableRows(db.connections, connections);
-      },
-    );
+    try {
+      await db.transaction(
+        'rw',
+        [
+          db.venues,
+          db.intensiveTrainers,
+          db.eventDays,
+          db.scheduleEvents,
+          db.announcements,
+          db.connections,
+        ],
+        async () => {
+          await replaceTableRows(db.venues, venues);
+          await replaceTableRows(db.intensiveTrainers, trainers);
+          await replaceTableRows(db.eventDays, days);
+          await replaceTableRows(db.scheduleEvents, events);
+          await replaceTableRows(db.announcements, announcements);
+          await replaceTableRows(db.connections, connections);
+        },
+      );
 
-    await Promise.all([
-      setLastSyncTime('venues'),
-      setLastSyncTime('intensiveTrainers'),
-      setLastSyncTime('eventDays'),
-      setLastSyncTime('schedule'),
-      setLastSyncTime('announcements'),
-    ]);
+      await Promise.all([
+        setLastSyncTime('venues'),
+        setLastSyncTime('intensiveTrainers'),
+        setLastSyncTime('eventDays'),
+        setLastSyncTime('schedule'),
+        setLastSyncTime('announcements'),
+      ]);
+    } catch (e) {
+      console.warn('[sync] запись в кэш', e);
+    }
+
     await pullSettings().catch((e) => {
       console.warn('[sync] настройки', e);
     });
@@ -153,6 +170,8 @@ export async function pullAllData(): Promise<void> {
     if (errors.length) {
       console.warn('[sync] частичная загрузка:', errors.join('; '));
     }
+  } catch (e) {
+    console.warn('[sync] pullAllData', e);
   } finally {
     const elapsed = Date.now() - started;
     const wait = MIN_SYNC_OVERLAY_MS - elapsed;
@@ -169,7 +188,7 @@ async function fetchVenues(): Promise<Venue[]> {
     .select('*')
     .eq('is_active', true)
     .order('sort_order');
-  if (error) throw error;
+  if (error) throwIfSupabaseError(error);
   return (data ?? []) as Venue[];
 }
 
@@ -180,13 +199,13 @@ async function fetchTrainers(): Promise<IntensiveTrainer[]> {
     .eq('is_visible', true)
     .order('sort_order')
     .order('full_name');
-  if (error) throw error;
+  if (error) throwIfSupabaseError(error);
   return (data ?? []) as IntensiveTrainer[];
 }
 
 async function fetchEventDays(): Promise<EventDay[]> {
   const { data, error } = await supabase.from('event_days').select('*').order('day_index');
-  if (error) throw error;
+  if (error) throwIfSupabaseError(error);
   return (data ?? []) as EventDay[];
 }
 
@@ -195,7 +214,7 @@ async function fetchScheduleEvents(venues: Venue[]): Promise<ScheduleEvent[]> {
     .from('schedule_events')
     .select('*')
     .order('starts_at');
-  if (error) throw error;
+  if (error) throwIfSupabaseError(error);
   const venueMap = new Map(venues.map((v) => [v.id, v]));
   return ((events ?? []) as ScheduleEvent[]).map((e) => ({
     ...e,
@@ -210,7 +229,7 @@ async function fetchAnnouncements(): Promise<Announcement[]> {
     .select('*')
     .eq('is_published', true)
     .order('published_at', { ascending: false });
-  if (error) throw error;
+  if (error) throwIfSupabaseError(error);
   return (data ?? []) as Announcement[];
 }
 
@@ -219,7 +238,7 @@ async function fetchConnections(): Promise<Connection[]> {
     .from('connections')
     .select('*')
     .order('created_at', { ascending: false });
-  if (error) throw error;
+  if (error) throwIfSupabaseError(error);
   return (data ?? []) as Connection[];
 }
 
@@ -267,7 +286,7 @@ export async function pullConnections(): Promise<Connection[]> {
 
 export async function pullSettings(): Promise<void> {
   const { data, error } = await supabase.from('event_settings').select('*');
-  if (error) throw error;
+  if (error) throwIfSupabaseError(error);
   for (const row of data ?? []) {
     await db.settings.put({ key: row.key, value: row.value });
   }
@@ -290,13 +309,13 @@ export async function flushSyncQueue(): Promise<void> {
           p_access_code: code,
           ...item.payload,
         });
-        if (error) throw error;
+        if (error) throwIfSupabaseError(error);
       } else if (item.action === 'respond_connection') {
         const { error } = await supabase.rpc('respond_connection', {
           p_access_code: code,
           ...item.payload,
         });
-        if (error) throw error;
+        if (error) throwIfSupabaseError(error);
       }
       if (item.id) await db.syncQueue.delete(item.id);
     } catch {
@@ -305,11 +324,19 @@ export async function flushSyncQueue(): Promise<void> {
       }
     }
   }
-  await pullConnections();
+  try {
+    await pullConnections();
+  } catch (e) {
+    console.warn('[sync] connections после очереди', e);
+  }
 }
 
 export async function syncWhenOnline(opts?: { skipPull?: boolean }): Promise<void> {
   if (!navigator.onLine) return;
-  await flushSyncQueue();
-  if (!opts?.skipPull) await pullAllData();
+  try {
+    await flushSyncQueue();
+    if (!opts?.skipPull) await pullAllData();
+  } catch (e) {
+    console.warn('[sync] syncWhenOnline', e);
+  }
 }

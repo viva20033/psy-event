@@ -71,6 +71,8 @@ export const useAdminData = create<AdminDataState>((set, get) => ({
         profiles: data,
         loaded: { ...s.loaded, profiles: true },
       }));
+    } catch (e) {
+      console.warn('[admin] profiles', e);
     } finally {
       set((s) => ({ loading: { ...s.loading, profiles: false } }));
     }
@@ -93,6 +95,8 @@ export const useAdminData = create<AdminDataState>((set, get) => ({
         eventDays: data,
         loaded: { ...s.loaded, eventDays: true },
       }));
+    } catch (e) {
+      console.warn('[admin] eventDays', e);
     } finally {
       set((s) => ({ loading: { ...s.loading, eventDays: false } }));
     }
@@ -112,6 +116,8 @@ export const useAdminData = create<AdminDataState>((set, get) => ({
         venues: (data ?? []) as Venue[],
         loaded: { ...s.loaded, venues: true },
       }));
+    } catch (e) {
+      console.warn('[admin] venues', e);
     } finally {
       set((s) => ({ loading: { ...s.loading, venues: false } }));
     }
@@ -128,6 +134,8 @@ export const useAdminData = create<AdminDataState>((set, get) => ({
         groups: (data ?? []) as Group[],
         loaded: { ...s.loaded, groups: true },
       }));
+    } catch (e) {
+      console.warn('[admin] groups', e);
     } finally {
       set((s) => ({ loading: { ...s.loading, groups: false } }));
     }
@@ -147,6 +155,8 @@ export const useAdminData = create<AdminDataState>((set, get) => ({
         announcements: (data ?? []) as Announcement[],
         loaded: { ...s.loaded, announcements: true },
       }));
+    } catch (e) {
+      console.warn('[admin] announcements', e);
     } finally {
       set((s) => ({ loading: { ...s.loading, announcements: false } }));
     }
